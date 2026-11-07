@@ -2,3 +2,5 @@ node_modules/
 .goodtimes-cache.json
 .goodtimes-geocache.json
 captures/
+settings.local.yaml
+settings.local.yml

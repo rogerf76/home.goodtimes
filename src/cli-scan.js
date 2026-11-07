@@ -7,7 +7,8 @@ const { scan } = require('./scanner');
 const { groupIntoEvents } = require('./grouping');
 
 (async () => {
-  const cfg = loadConfig(process.argv[2]);
+  let cfg;
+  try { cfg = loadConfig(process.argv[2]); } catch (e) { console.error(e.message); process.exit(1); }
   console.log(`settings: ${cfg._file}`);
   const items = await scan(cfg, (p) => p.phase !== 'done' && console.log(p));
   const events = groupIntoEvents(items, cfg);

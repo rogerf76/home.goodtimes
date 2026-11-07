@@ -7,19 +7,9 @@
 #     {min: 5, max: 10}
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Folders to show. Local paths or network shares. Use single quotes for
-# Windows paths so backslashes are kept as-is.
-#   'D:\Pictures\Family'
-#   '\\NAS\photo\2024'            (UNC network share)
-#   '//NAS/photo/2024'            (same thing, forward slashes)
-sources:
-  - '\\dunes\Storage\50th Party Slideshow'
-
-# Subfolders: each folder directly inside a source folder is treated as an album
-# (a trip or holiday). Its photos are grouped and played together as one block,
-# split into days/outings by date and place. Loose photos in the source folder
-# itself are grouped by date and place as usual.
-recursive: true               # also include folders nested deeper inside an album
+# Machine-specific settings (sources, recursive, display.screen, display.fullscreen)
+# live in settings.local.yaml next to this file. That file isn't checked in, and
+# GoodTimes won't start without it (the error message shows a sample).
 
 include:
   images: [jpg, jpeg, png, gif, webp, bmp, avif]
@@ -124,8 +114,6 @@ transitions:
 
 # ── Display ─────────────────────────────────────────────────────────────────
 display:
-  screen: 0                   # which monitor (0 = first)
-  fullscreen: true
   background: '#000000'
   gap: 6                      # pixels between photos in multi-photo layouts
   cornerRadius: 10            # rounded corners on photos in multi-photo layouts, in pixels

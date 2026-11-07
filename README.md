@@ -11,7 +11,10 @@ npm start -- D:\path\to\my.yaml    # or a specific settings file (.yaml or .json
 npm run scan                       # headless: list the events it finds, no window
 ```
 
-Edit `sources:` in `settings.yaml` first. Every option is documented in that file.
+Settings come from two files in the same folder:
+
+- **`settings.yaml`** holds the shared options (checked in). Every option is documented in that file.
+- **`settings.local.yaml`** holds this computer's options: `sources`, `recursive`, `display.screen` and `display.fullscreen`. It isn't checked in. GoodTimes won't start without it, and the error message shows a sample to copy. Anything in it overrides `settings.yaml`.
 
 ## Keys
 

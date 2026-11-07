@@ -1,5 +1,6 @@
 'use strict';
-// Loads settings.yaml / settings.json, merges with defaults and normalises values.
+// Loads settings.yaml / settings.json plus the per-machine settings.local.yaml next to it,
+// merges them over the defaults and normalises values.
 
 const fs = require('fs');
 const path = require('path');
@@ -136,19 +137,51 @@ function findSettingsFile(explicit) {
   throw new Error('No settings.yaml or settings.json found. Pass one with: npm start -- path/to/settings.yaml');
 }
 
+// Settings that differ per machine live in settings.local.yaml (not checked in).
+const LOCAL_NAMES = ['settings.local.yaml', 'settings.local.yml'];
+const LOCAL_SAMPLE = String.raw`# settings.local.yaml: settings for this computer only (not checked in).
+# Anything here overrides settings.yaml.
+
+# Folders to show. Local paths or network shares. Use single quotes for
+# Windows paths so backslashes are kept as-is.
+sources:
+  - 'D:\Pictures\Family'
+  - '\\NAS\photo\2024'          # UNC network share ('//NAS/photo/2024' also works)
+
+# Also include folders nested deeper inside an album (subfolder).
+recursive: true
+
+display:
+  screen: 0                   # which monitor (0 = first)
+  fullscreen: true
+`;
+
+function readSettings(file) {
+  const text = fs.readFileSync(file, 'utf8');
+  return (file.endsWith('.json') ? JSON.parse(text) : yaml.load(text)) || {};
+}
+
 function loadConfig(explicitPath) {
   const file = findSettingsFile(explicitPath);
-  const text = fs.readFileSync(file, 'utf8');
-  const raw = file.endsWith('.json') ? JSON.parse(text) : yaml.load(text) || {};
+  const raw = readSettings(file);
+  const dir = path.dirname(file);
+  const localFile = LOCAL_NAMES.map((n) => path.join(dir, n)).find((p) => fs.existsSync(p));
+  if (!localFile) {
+    throw new Error(`Missing ${path.join(dir, LOCAL_NAMES[0])}\n\n`
+      + `Create it with the settings for this computer, for example:\n\n${LOCAL_SAMPLE}`);
+  }
+  let local;
+  try { local = readSettings(localFile); } catch (e) { throw new Error(`Error in ${localFile}:
+${e.message}`); }
 
   // Custom layouts / weights should not be deep-merged into defaults key by key
   // in a way that prevents disabling built-ins, so weights merge normally (set 0 to disable).
-  const cfg = merge(DEFAULTS, raw);
+  const cfg = merge(merge(DEFAULTS, raw), local);
   const baseDir = path.dirname(file);
 
   if (typeof cfg.sources === 'string') cfg.sources = [cfg.sources];
   if (!Array.isArray(cfg.sources) || cfg.sources.length === 0) {
-    throw new Error(`No "sources" folders configured in ${file}`);
+    throw new Error(`No "sources" folders configured in ${localFile}\n\nFor example:\n\n${LOCAL_SAMPLE}`);
   }
   cfg.sources = cfg.sources.map((s) => path.resolve(baseDir, String(s)));
   cfg.cacheFile = cfg.cacheFile ? path.resolve(baseDir, cfg.cacheFile) : null;
@@ -168,6 +201,7 @@ function loadConfig(explicitPath) {
   cfg.excludeFolders = (cfg.excludeFolders || []).map((s) => String(s).toLowerCase());
 
   cfg._file = file;
+  cfg._localFile = localFile;
   return cfg;
 }
 
