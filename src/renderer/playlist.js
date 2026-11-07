@@ -43,12 +43,15 @@ class Playlist {
     this.buildOrder();
 
     if (!this.started) {
-      this.pos = this.cfg.startAt === 'random' && this.order.length ? Math.floor(Math.random() * this.order.length) - 1 : -1;
+      // A random start begins at the start of an album / event, never half-way through one.
+      const starts = this.unitStarts || [];
+      this.pos = this.cfg.startAt === 'random' && starts.length ? starts[Math.floor(Math.random() * starts.length)] - 1 : -1;
       this.buffer = [];
       this.started = true;
     } else if (prevEventStart != null && this.cfg.order !== 'shuffle' && this.cfg.order !== 'shuffle-events') {
       // Rescan: carry on from roughly the same point in time.
-      const idx = this.order.findIndex((i) => this.events[i].start >= prevEventStart);
+      const rev = this.cfg.order === 'reverse';
+      const idx = this.order.findIndex((i) => (rev ? this.events[i].start <= prevEventStart : this.events[i].start >= prevEventStart));
       this.pos = (idx < 0 ? this.order.length : idx) - 1;
       this.buffer = [];
     } else {
@@ -57,11 +60,76 @@ class Playlist {
     }
   }
 
+  // Events are played in "units": an album (subfolder) is one unit containing all its
+  // events in date order; each loose event in the root folder is a unit of its own.
+  // Shuffling moves whole units around. With grouping.albumVisit set, an album is
+  // instead cut into runs of a few events (days) that are shuffled separately but
+  // still play in date order, so the trip unfolds over several visits.
   buildOrder() {
-    const idx = this.events.map((_, i) => i);
-    if (this.cfg.order === 'reverse') idx.reverse();
-    if (this.cfg.order === 'shuffle-events') SS.shuffle(idx);
-    this.order = idx;
+    let units = [];
+    const byUnit = new Map();
+    this.events.forEach((ev, i) => {
+      const key = ev.unit ?? `e${i}`;
+      if (!byUnit.has(key)) {
+        const u = [];
+        u.key = key;
+        byUnit.set(key, u);
+        units.push(u);
+      }
+      byUnit.get(key).push(i);
+    });
+    if (this.cfg.order === 'reverse') { units.reverse(); units.forEach((u) => u.reverse()); }
+    if (this.cfg.order === 'shuffle-events') units = this.shuffleUnits(units);
+    this.order = units.flat();
+    this.unitStarts = [];
+    let p = 0;
+    for (const u of units) { this.unitStarts.push(p); p += u.length; }
+  }
+
+  shuffleUnits(units) {
+    const visit = this.cfg.grouping.albumVisit; // null = whole album at once, else {min, max}
+    let chunks = units;
+    if (visit) {
+      chunks = [];
+      for (const u of units) {
+        if (!this.events[u[0]].album) { chunks.push(u); continue; }
+        for (let i = 0, part = 0; i < u.length; part++) {
+          const n = Math.max(1, Math.round(visit.min + Math.random() * (visit.max - visit.min)));
+          const c = u.slice(i, i + n);
+          c.key = u.key;
+          c.part = part;
+          chunks.push(c);
+          i += n;
+        }
+      }
+    }
+    SS.shuffle(chunks);
+    if (visit) {
+      // Avoid two chunks of the same album back to back (they'd just merge into one long run).
+      for (let i = 1; i < chunks.length; i++) {
+        if (chunks[i].key !== chunks[i - 1].key) continue;
+        const ok = (j) => chunks[j].key !== chunks[i - 1].key
+          && (i + 1 >= chunks.length || chunks[j].key !== chunks[i + 1].key)
+          && (j === 0 || chunks[j - 1].key !== chunks[i].key)
+          && (j + 1 >= chunks.length || chunks[j + 1].key !== chunks[i].key);
+        let j = -1;
+        for (let k = 0; k < chunks.length; k++) if (Math.abs(k - i) > 1 && ok(k)) { j = k; break; }
+        if (j >= 0) [chunks[i], chunks[j]] = [chunks[j], chunks[i]];
+      }
+      // Put each album's chunks back in date order across the slots they landed in.
+      const slots = new Map();
+      chunks.forEach((c, pos) => {
+        if (!slots.has(c.key)) slots.set(c.key, []);
+        slots.get(c.key).push(pos);
+      });
+      const fixed = [...chunks];
+      for (const positions of slots.values()) {
+        const ordered = positions.map((p) => chunks[p]).sort((a, b) => (a.part || 0) - (b.part || 0));
+        positions.forEach((p, k) => { fixed[p] = ordered[k]; });
+      }
+      chunks = fixed;
+    }
+    return chunks;
   }
 
   get isEmpty() {
@@ -79,7 +147,7 @@ class Playlist {
       this.pos++;
       if (this.pos >= this.order.length) {
         this.pos = 0;
-        if (this.cfg.order === 'shuffle-events') SS.shuffle(this.order);
+        if (this.cfg.order === 'shuffle-events') this.buildOrder();
       }
       const ev = this.events[this.order[this.pos]];
       if (!ev.items.length) continue;

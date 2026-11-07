@@ -22,6 +22,7 @@ const DEFAULTS = {
     maxGapHours: 4,
     maxDistanceKm: 30,
     keepEventsTogether: true,
+    albumVisit: [2, 4],
   },
 
   timing: {
@@ -83,6 +84,7 @@ const DEFAULTS = {
     enabled: true,
     showDate: true,
     showPlace: true,
+    showAlbum: true,
     showFilename: false,
     dateFormat: { day: 'numeric', month: 'long', year: 'numeric' },
     locale: '',
@@ -148,6 +150,8 @@ function loadConfig(explicitPath) {
   cfg.cacheFile = cfg.cacheFile ? path.resolve(baseDir, cfg.cacheFile) : null;
   cfg.geocoding.cacheFile = path.resolve(baseDir, cfg.geocoding.cacheFile);
 
+  const av = cfg.grouping.albumVisit;
+  cfg.grouping.albumVisit = av == null || av === 0 || av === 'all' ? null : toRange(av, 'grouping.albumVisit');
   cfg.timing.interval = toRange(cfg.timing.interval, 'timing.interval');
   cfg.timing.layoutDuration = toRange(cfg.timing.layoutDuration, 'timing.layoutDuration');
   cfg.timing.stagger = toRange(cfg.timing.stagger, 'timing.stagger');

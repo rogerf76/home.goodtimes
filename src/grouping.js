@@ -1,6 +1,12 @@
 'use strict';
 // Sorts media by capture time and splits it into "events": runs of photos taken
 // close together in time AND place. Layouts only mix photos from the same event.
+//
+// Albums: photos in a first-level subfolder (a trip / holiday) are grouped on their
+// own – split into events (days, outings) by the same rules, but never mixed with
+// loose photos or other albums, and played back together as one block ("unit").
+// Loose photos in the root folder are split into events as usual; each of those
+// events is its own unit.
 
 function haversineKm(a, b) {
   const R = 6371;
@@ -11,7 +17,7 @@ function haversineKm(a, b) {
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
-function groupIntoEvents(items, cfg) {
+function splitByTimeAndPlace(items, cfg) {
   const { maxGapHours, maxDistanceKm } = cfg.grouping;
   const sorted = [...items].sort((a, b) => a.date - b.date || a.path.localeCompare(b.path));
   const events = [];
@@ -27,7 +33,7 @@ function groupIntoEvents(items, cfg) {
       else if (hasLoc && lastLoc && maxDistanceKm > 0 && haversineKm(lastLoc, it) > maxDistanceKm) split = true;
     }
     if (split) {
-      cur = { id: events.length, start: it.date, end: it.date, items: [], lat: null, lon: null, place: null };
+      cur = { id: -1, start: it.date, end: it.date, items: [], lat: null, lon: null, place: null };
       events.push(cur);
       lastLoc = null;
     }
@@ -39,6 +45,38 @@ function groupIntoEvents(items, cfg) {
     }
   }
   return events;
+}
+
+function groupIntoEvents(items, cfg) {
+  const albums = new Map(); // albumKey -> items
+  const loose = [];
+  for (const it of items) {
+    if (it.albumKey) {
+      if (!albums.has(it.albumKey)) albums.set(it.albumKey, []);
+      albums.get(it.albumKey).push(it);
+    } else {
+      loose.push(it);
+    }
+  }
+
+  // A unit is played as one uninterrupted block.
+  const units = splitByTimeAndPlace(loose, cfg).map((ev) => ({ start: ev.start, album: null, events: [ev] }));
+  for (const albumItems of albums.values()) {
+    const events = splitByTimeAndPlace(albumItems, cfg);
+    if (events.length) units.push({ start: events[0].start, album: albumItems[0].album, events });
+  }
+  units.sort((a, b) => a.start - b.start);
+
+  const out = [];
+  units.forEach((u, unitIndex) => {
+    for (const ev of u.events) {
+      ev.id = out.length;
+      ev.unit = unitIndex;
+      ev.album = u.album;
+      out.push(ev);
+    }
+  });
+  return out;
 }
 
 module.exports = { groupIntoEvents, haversineKm };

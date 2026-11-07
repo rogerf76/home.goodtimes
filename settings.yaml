@@ -13,9 +13,13 @@
 #   '\\NAS\photo\2024'            (UNC network share)
 #   '//NAS/photo/2024'            (same thing, forward slashes)
 sources:
-  - 'C:\Users\roger\Desktop\Lachie World Cup Pics'
+  - '\\dunes\Storage\50th Party Slideshow'
 
-recursive: true               # include sub-folders
+# Subfolders: each folder directly inside a source folder is treated as an album
+# (a trip or holiday). Its photos are grouped and played together as one block,
+# split into days/outings by date and place. Loose photos in the source folder
+# itself are grouped by date and place as usual.
+recursive: true               # also include folders nested deeper inside an album
 
 include:
   images: [jpg, jpeg, png, gif, webp, bmp, avif]
@@ -35,13 +39,17 @@ rescanMinutes: 60             # look for new/removed files (0 = never)
 #   reverse         – newest event first
 #   shuffle-events  – events in random order, photos inside each in date order
 #   shuffle         – everything random, ignores events
-order: chronological
+order: shuffle-events
 startAt: beginning            # beginning | random
 
 grouping:
   maxGapHours: 4              # a gap longer than this starts a new event
   maxDistanceKm: 30           # moving further than this (GPS) starts a new event
   keepEventsTogether: true    # never mix photos from different events on screen
+  # shuffle-events only: how many events (usually days) of an album to show before
+  # moving on to something else. The album carries on, in order, on a later visit.
+  # Use 'all' to play each album start to finish in one go.
+  albumVisit: [2, 4]
 
 # ── Timing ──────────────────────────────────────────────────────────────────
 timing:
@@ -138,6 +146,7 @@ captions:
   enabled: true
   showDate: true
   showPlace: true             # needs geocoding enabled below
+  showAlbum: true             # show the subfolder (trip) name for photos in a subfolder
   showFilename: false
   # Intl.DateTimeFormat options, e.g. {weekday: long, day: numeric, month: short, year: numeric}
   dateFormat: {day: numeric, month: long, year: numeric}

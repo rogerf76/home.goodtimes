@@ -70,6 +70,7 @@
     const c = cfg.captions;
     if (!c.enabled) return '';
     const parts = [];
+    if (c.showAlbum && item.event && item.event.album) parts.push(item.event.album);
     if (c.showDate && item.date) parts.push(dateFmt.format(new Date(item.date)));
     if (c.showPlace && item.event && item.event.place) parts.push(item.event.place);
     if (c.showFilename) parts.push(item.name);

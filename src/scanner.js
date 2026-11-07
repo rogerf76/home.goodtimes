@@ -30,7 +30,12 @@ function saveCache(file, entries) {
   }
 }
 
-async function walk(dir, cfg, out) {
+/**
+ * Files directly in a source folder have no album. Each first-level subfolder is an
+ * album (a trip / holiday); anything nested deeper still belongs to that album.
+ * Deeper levels are only walked when cfg.recursive is true.
+ */
+async function walk(dir, cfg, out, album = null) {
   let entries;
   try {
     entries = await fsp.readdir(dir, { withFileTypes: true });
@@ -43,15 +48,17 @@ async function walk(dir, cfg, out) {
     if (ent.name.startsWith('.')) continue;
     const full = path.join(dir, ent.name);
     if (ent.isDirectory()) {
-      if (cfg.recursive && !cfg.excludeFolders.includes(ent.name.toLowerCase())) subdirs.push(full);
+      if (cfg.excludeFolders.includes(ent.name.toLowerCase())) continue;
+      if (!album) subdirs.push({ dir: full, album: { name: ent.name, key: full } });
+      else if (cfg.recursive) subdirs.push({ dir: full, album });
     } else if (ent.isFile()) {
       const ext = path.extname(ent.name).slice(1).toLowerCase();
-      if (cfg.include.images.includes(ext)) out.push({ path: full, type: 'image' });
-      else if (cfg.include.videos.includes(ext)) out.push({ path: full, type: 'video' });
+      const type = cfg.include.images.includes(ext) ? 'image' : cfg.include.videos.includes(ext) ? 'video' : null;
+      if (type) out.push({ path: full, type, album: album ? album.name : null, albumKey: album ? album.key : null });
     }
   }
   // Walk a few subfolders in parallel – helps a lot over SMB latency.
-  await mapLimit(subdirs, 4, (d) => walk(d, cfg, out));
+  await mapLimit(subdirs, 4, (d) => walk(d.dir, cfg, out, d.album));
 }
 
 async function mapLimit(items, limit, fn) {
@@ -162,7 +169,7 @@ async function scan(cfg, onProgress = () => {}) {
       dirty = true;
     }
     newCache[key] = { size: st.size, mtime: st.mtimeMs, meta };
-    results.push({ path: f.path, type: f.type, name: path.basename(f.path), ...meta });
+    results.push({ path: f.path, type: f.type, name: path.basename(f.path), album: f.album, albumKey: f.albumKey, ...meta });
     if (++done % 200 === 0) onProgress({ phase: 'reading', done, total: files.length });
   });
 
