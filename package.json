@@ -1,0 +1,22 @@
+{
+  "name": "goodtimes",
+  "productName": "GoodTimes",
+  "version": "1.0.0",
+  "description": "Automatic photo & video slideshow with date/location grouping and mixed layouts",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "scan": "node src/cli-scan.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "exifr": "^7.1.3",
+    "image-size": "^2.1.0",
+    "js-yaml": "^5.5.0"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3"
+  }
+}

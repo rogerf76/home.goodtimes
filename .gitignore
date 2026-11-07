@@ -1,0 +1,4 @@
+node_modules/
+.goodtimes-cache.json
+.goodtimes-geocache.json
+captures/

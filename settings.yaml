@@ -1,0 +1,153 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  GoodTimes settings
+#  Anything you leave out falls back to the built-in default (shown here).
+#  Time values are in SECONDS. Any range can be written as:
+#     7            (fixed)
+#     [5, 10]      (random between 5 and 10)
+#     {min: 5, max: 10}
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Folders to show. Local paths or network shares. Use single quotes for
+# Windows paths so backslashes are kept as-is.
+#   'D:\Pictures\Family'
+#   '\\NAS\photo\2024'            (UNC network share)
+#   '//NAS/photo/2024'            (same thing, forward slashes)
+sources:
+  - 'C:\Users\roger\Desktop\Lachie World Cup Pics'
+
+recursive: true               # include sub-folders
+
+include:
+  images: [jpg, jpeg, png, gif, webp, bmp, avif]
+  videos: [mp4, m4v, mov, webm]   # needs codecs Chromium can play (H.264, VP9, AV1)
+
+excludeFolders: ['@eaDir', '#recycle', '$RECYCLE.BIN', 'System Volume Information', '.thumbnails']
+
+# Dates/locations are read once and cached here, so restarts are quick even
+# over a slow network share. Relative paths are relative to this file.
+cacheFile: .goodtimes-cache.json
+rescanMinutes: 60             # look for new/removed files (0 = never)
+
+# ── Ordering ────────────────────────────────────────────────────────────────
+# Photos are sorted by capture date (EXIF → date in filename → file date) and
+# split into "events": runs of photos taken close together in time and place.
+#   chronological   – oldest event first
+#   reverse         – newest event first
+#   shuffle-events  – events in random order, photos inside each in date order
+#   shuffle         – everything random, ignores events
+order: chronological
+startAt: beginning            # beginning | random
+
+grouping:
+  maxGapHours: 4              # a gap longer than this starts a new event
+  maxDistanceKm: 30           # moving further than this (GPS) starts a new event
+  keepEventsTogether: true    # never mix photos from different events on screen
+
+# ── Timing ──────────────────────────────────────────────────────────────────
+timing:
+  interval: [6, 10]           # time between changes on screen
+  layoutDuration: [25, 50]    # how long a layout stays before switching to a new one
+  stagger: [0.2, 1.2]         # delay between slots when several change in one go
+
+# When a multi-photo layout updates, how many of its photos change.
+# Relative weights – the chance of each is weight / total.
+updateMode:
+  all: 1                      # every photo changes at once
+  some: 2                     # a random subset changes
+  one: 3                      # just one photo changes
+
+# ── Layouts ─────────────────────────────────────────────────────────────────
+layouts:
+  # Relative chance of each built-in layout. 0 disables it.
+  weights:
+    single: 4                 # one photo full screen
+    pair: 3                   # two side-by-side
+    pair-uneven: 2            # big + narrower side-by-side
+    pair-stacked: 0           # two on top of each other (good on portrait screens)
+    triple-columns: 2         # three tall columns (great for portrait photos)
+    portrait-centre: 1        # three columns, wider in the middle
+    big-left-two: 2           # one large + two small on the right
+    big-right-two: 2          # one large + two small on the left
+    big-left-three: 1         # one large + three small stacked
+    quad: 2                   # 2×2 grid
+    hero-strip: 1             # one wide photo over a strip of three
+    mosaic-5: 1               # one large + 2×2 small
+    grid-6: 1                 # 3×2 grid
+
+  # Your own layouts: list of slots [x, y, width, height] as fractions of the screen.
+  custom:
+    # film-strip:
+    #   weight: 1
+    #   slots:
+    #     - [0,    0, 0.25, 1]
+    #     - [0.25, 0, 0.25, 1]
+    #     - [0.5,  0, 0.25, 1]
+    #     - [0.75, 0, 0.25, 1]
+
+  # How strongly to prefer layouts whose slot shapes match the upcoming photos
+  # (portrait photos into tall slots, etc). 0 = ignore shape.
+  aspectMatchStrength: 2.0
+  # How many upcoming photos to consider when filling a slot. Higher = better fit,
+  # but order becomes less strictly chronological.
+  lookahead: 8
+
+# ── Transitions ─────────────────────────────────────────────────────────────
+# Available types:
+#   fade, slide-left, slide-right, slide-up, slide-down, zoom-in, zoom-out,
+#   blur, wipe-left, wipe-right, wipe-up, wipe-down, iris, flip, cut
+# One is chosen at random from each list every time.
+transitions:
+  slot:                       # one photo replacing another within a layout
+    types: [fade, slide-left, slide-right, slide-up, slide-down, zoom-in, zoom-out, blur, wipe-left, wipe-right, wipe-up, wipe-down, iris, flip]
+    duration: [0.8, 1.6]
+  layout:                     # switching to a whole new layout
+    types: [fade, slide-left, slide-up, zoom-out, blur, iris]
+    duration: [1.2, 2.0]
+    # Chance that a new layout builds up photo-by-photo over the old one,
+    # instead of transitioning the whole screen at once.
+    perSlotChance: 0.5
+  easing: 'cubic-bezier(0.65, 0, 0.35, 1)'
+
+# ── Display ─────────────────────────────────────────────────────────────────
+display:
+  screen: 0                   # which monitor (0 = first)
+  fullscreen: true
+  background: '#000000'
+  gap: 6                      # pixels between photos in multi-photo layouts
+  cornerRadius: 0             # rounded corners on photos, in pixels
+  fitSingle: contain          # full-screen photos: contain (whole photo) | cover (fill & crop)
+  maxCrop: 0.4                # in multi layouts, if filling a slot would crop more than
+                              # this fraction of a photo, show it whole instead
+  blurredBackdrop: true       # fill empty space around 'contained' photos with a blurred copy
+  kenBurns:
+    enabled: true             # slow pan & zoom on photos
+    maxZoom: 1.12
+  preventSleep: true          # keep the monitor awake
+
+# ── Video ───────────────────────────────────────────────────────────────────
+video:
+  enabled: true
+  muted: true
+  volume: 0.6
+  maxOnScreen: 1              # max videos playing at the same time
+  playToEnd: true             # don't replace a video until it has finished...
+  maxSeconds: 60              # ...or played this long (long videos are cut off)
+
+# ── Captions ────────────────────────────────────────────────────────────────
+captions:
+  enabled: true
+  showDate: true
+  showPlace: true             # needs geocoding enabled below
+  showFilename: false
+  # Intl.DateTimeFormat options, e.g. {weekday: long, day: numeric, month: short, year: numeric}
+  dateFormat: {day: numeric, month: long, year: numeric}
+  locale: ''                  # e.g. en-GB, de-DE; empty = system default
+  fontSize: 18
+
+# Turn GPS coordinates into place names ("Keswick, United Kingdom") using
+# OpenStreetMap's free Nominatim service. Sends one approximate coordinate
+# per event (not your photos) and caches results. Off by default.
+geocoding:
+  enabled: false
+  language: en
+  cacheFile: .goodtimes-geocache.json
