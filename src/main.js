@@ -104,7 +104,9 @@ app.whenReady().then(async () => {
     cfg = loadConfig(settingsArg);
     log(`settings: ${cfg._file}`);
   } catch (e) {
-    dialog.showErrorBox('GoodTimes settings error', e.message);
+    // A missing settings.local.yaml is a setup step, not a fault: print the sample to the console.
+    if (e.code === 'NO_LOCAL_SETTINGS') console.error(e.message);
+    else dialog.showErrorBox('GoodTimes settings error', e.message);
     app.exit(1);
     return;
   }

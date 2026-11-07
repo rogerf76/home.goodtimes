@@ -167,8 +167,10 @@ function loadConfig(explicitPath) {
   const dir = path.dirname(file);
   const localFile = LOCAL_NAMES.map((n) => path.join(dir, n)).find((p) => fs.existsSync(p));
   if (!localFile) {
-    throw new Error(`Missing ${path.join(dir, LOCAL_NAMES[0])}\n\n`
+    const err = new Error(`Missing ${path.join(dir, LOCAL_NAMES[0])}\n\n`
       + `Create it with the settings for this computer, for example:\n\n${LOCAL_SAMPLE}`);
+    err.code = 'NO_LOCAL_SETTINGS';
+    throw err;
   }
   let local;
   try { local = readSettings(localFile); } catch (e) { throw new Error(`Error in ${localFile}:
