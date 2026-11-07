@@ -114,7 +114,7 @@ display:
   fullscreen: true
   background: '#000000'
   gap: 6                      # pixels between photos in multi-photo layouts
-  cornerRadius: 0             # rounded corners on photos, in pixels
+  cornerRadius: 10            # rounded corners on photos in multi-photo layouts, in pixels
   fitSingle: contain          # full-screen photos: contain (whole photo) | cover (fill & crop)
   maxCrop: 0.4                # in multi layouts, if filling a slot would crop more than
                               # this fraction of a photo, show it whole instead

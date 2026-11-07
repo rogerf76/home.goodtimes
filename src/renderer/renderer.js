@@ -205,6 +205,7 @@
       s.style.top = `calc(${r.y * 100}% + ${g / 2}px)`;
       s.style.width = `calc(${r.w * 100}% - ${g}px)`;
       s.style.height = `calc(${r.h * 100}% - ${g}px)`;
+      if (layout.slots.length === 1) s.style.borderRadius = '0'; // full-screen photos stay square
       grid.appendChild(s);
       return { rect: r, el: s, stage: st, aspect: 1, area: r.w * r.h, current: null, swapping: false };
     });
