@@ -68,11 +68,11 @@ layouts:
     portrait-centre: 1        # three columns, wider in the middle
     big-left-two: 2           # one large + two small on the right
     big-right-two: 2          # one large + two small on the left
-    big-left-three: 1         # one large + three small stacked
+    big-left-three: 2         # one large + three small stacked
     quad: 2                   # 2×2 grid
-    hero-strip: 1             # one wide photo over a strip of three
-    mosaic-5: 1               # one large + 2×2 small
-    grid-6: 1                 # 3×2 grid
+    hero-strip: 2             # one wide photo over a strip of three
+    mosaic-5: 2               # one large + 2×2 small
+    grid-6: 2                 # 3×2 grid
 
   # Your own layouts: list of slots [x, y, width, height] as fractions of the screen.
   custom:
@@ -148,6 +148,6 @@ captions:
 # OpenStreetMap's free Nominatim service. Sends one approximate coordinate
 # per event (not your photos) and caches results. Off by default.
 geocoding:
-  enabled: false
+  enabled: true
   language: en
   cacheFile: .goodtimes-geocache.json
