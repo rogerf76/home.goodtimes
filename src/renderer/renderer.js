@@ -253,6 +253,7 @@
     const grid = div('grid');
     grid.style.inset = `${g / 2}px`;
     el.appendChild(grid);
+    if (layout.tree === undefined) layout.tree = SS.buildLayoutTree(layout.slots);
     const st = { el, grid, layout, gap: g, slots: [] };
     st.slots = layout.slots.map((r) => {
       const s = div('slot');
@@ -266,6 +267,32 @@
     });
     updateAspects(st);
     return st;
+  }
+
+  // Resize the layout's rows/columns (by at most display.alignPhotos, e.g. 10%) so the
+  // photos' edges line up with their neighbours. Photos are never cropped or distorted.
+  // `override` = { slot, aspect } for a photo that is about to replace another one.
+  function alignStage(st, override, animateMs) {
+    const tree = st.layout.tree;
+    const maxScale = cfg.display.alignPhotos;
+    if (!tree || tree.leaf !== undefined || !(maxScale > 0)) return;
+    const aspects = st.slots.map((s) => {
+      if (override && override.slot === s) return override.aspect;
+      const it = (s.prepared && s.prepared.item) || (s.current && s.current.item);
+      return it && it.aspect ? it.aspect : null;
+    });
+    const g = st.gap;
+    const box = { x: 0, y: 0, w: (root.clientWidth || window.innerWidth) - g, h: (root.clientHeight || window.innerHeight) - g };
+    const F = SS.optimiseLayout(tree, st.layout.slots, aspects, box, g, maxScale);
+    const boxes = SS.placeTree(tree, F, box);
+    st.slots.forEach((s, i) => {
+      const b = boxes[i];
+      s.el.style.transition = animateMs ? ['left', 'top', 'width', 'height'].map((p) => `${p} ${animateMs}ms ${easing}`).join(', ') : 'none';
+      s.el.style.left = `${b.x + g / 2}px`;
+      s.el.style.top = `${b.y + g / 2}px`;
+      s.el.style.width = `${Math.max(1, b.w - g)}px`;
+      s.el.style.height = `${Math.max(1, b.h - g)}px`;
+    });
   }
 
   function updateAspects(st) {
@@ -354,6 +381,7 @@
       return;
     }
 
+    alignStage(ns, null, 0);
     root.appendChild(ns.el);
     const old = stage;
     stage = ns;
@@ -401,6 +429,8 @@
       const media = await prepareFor(slot, item, false, exclude);
       if (!media) return;
       if (stage !== owner) { releaseMedia(media); return; } // layout changed meanwhile
+      // Neighbours glide to re-align around the new photo while it transitions in.
+      alignStage(owner, { slot, aspect: media.item.aspect }, durMs);
       slot.el.appendChild(media.node);
       const old = slot.current;
       activate(slot, media);
@@ -519,7 +549,7 @@
       default:
     }
   });
-  window.addEventListener('resize', () => { if (stage) updateAspects(stage); });
+  window.addEventListener('resize', () => { if (stage) { updateAspects(stage); alignStage(stage, null, 0); } });
 
   // ---------- library ----------
   function applyLibrary(lib) {

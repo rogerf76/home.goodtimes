@@ -131,6 +131,9 @@ display:
   fitSingle: contain          # full-screen photos: contain (whole photo) | cover (fill & crop)
   maxCrop: 0                  # in multi layouts, the most of a photo that may be cropped off to
                               # fill its spot (0.4 = 40%). 0 = never crop, always show the whole photo
+  alignPhotos: 0.1            # let photos grow or shrink by up to this much (0.1 = 10%) so their
+                              # edges line up with neighbouring photos. Never crops or distorts.
+                              # 0 = off
   blurredBackdrop: false      # fill the space around a whole photo with a blurred copy (false = black)
   kenBurns:                   # slow pan & zoom inside the photo's frame
     enabled: true
