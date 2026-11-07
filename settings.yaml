@@ -138,7 +138,7 @@ video:
   enabled: true
   muted: true
   volume: 0.6
-  fullScreen: true            # always show videos full screen on their own; false = videos can
+  fullScreen: false           # true = always show videos full screen on their own; false = videos can
                               # appear as tiles mixed in with photos
   maxOnScreen: 1              # (tiles only) max videos playing at the same time
   playToEnd: true             # don't replace a video until it has finished...
