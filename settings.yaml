@@ -96,7 +96,10 @@ layouts:
 
   # How strongly to prefer layouts whose slot shapes match the upcoming photos
   # (portrait photos into tall slots, etc). 0 = ignore shape.
-  aspectMatchStrength: 2.0
+#  aspectMatchStrength: 2.0
+# Increased to 4.0 when we changed the code to not crop or zoom the pics, 
+# to increase the liklihood of the layout matching the photos nicely
+  aspectMatchStrength: 4.0
   # How many upcoming photos to consider when filling a slot. Higher = better fit,
   # but order becomes less strictly chronological.
   lookahead: 8
@@ -126,12 +129,16 @@ display:
   gap: 6                      # pixels between photos in multi-photo layouts
   cornerRadius: 10            # rounded corners on photos in multi-photo layouts, in pixels
   fitSingle: contain          # full-screen photos: contain (whole photo) | cover (fill & crop)
-  maxCrop: 0.4                # in multi layouts, if filling a slot would crop more than
-                              # this fraction of a photo, show it whole instead
-  blurredBackdrop: true       # fill empty space around 'contained' photos with a blurred copy
-  kenBurns:
-    enabled: true             # slow pan & zoom on photos
-    maxZoom: 1.12
+  maxCrop: 0                  # in multi layouts, the most of a photo that may be cropped off to
+                              # fill its spot (0.4 = 40%). 0 = never crop, always show the whole photo
+  blurredBackdrop: false      # fill the space around a whole photo with a blurred copy (false = black)
+  kenBurns:                   # slow pan & zoom inside the photo's frame
+    enabled: true
+    chance: 0.3               # chance that a newly shown photo gets it
+    maxPhotoSize: 0.4         # only on photos taking up at most this much of the screen
+                              # (0.4 = 40%), so never full-screen ones. Never more than
+                              # one photo on screen moves at a time.
+    maxZoom: 1.15
   preventSleep: true          # keep the monitor awake
 
 # ── Video ───────────────────────────────────────────────────────────────────

@@ -43,6 +43,17 @@ html, body {
   display: block;
 }
 
+/* Whole-photo fit: the element is shrunk to the photo's own shape and centred in its
+   spot (cq units = the slot's size), so border-radius rounds the photo's real corners. */
+.media .main.fitted {
+  margin: auto;
+  width: min(100cqw, calc(100cqh * var(--ar)));
+  height: min(100cqh, calc(100cqw / var(--ar)));
+}
+.media .main.rounded { border-radius: var(--radius); }
+.media .main { overflow: hidden; }
+.media .main .pic { display: block; width: 100%; height: 100%; }
+
 .media .backdrop {
   position: absolute;
   left: -8%;

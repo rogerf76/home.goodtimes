@@ -120,8 +120,27 @@
     const crop = 1 - Math.min(aspect, slot.aspect) / Math.max(aspect, slot.aspect);
     const isSingle = stageOf(slot).slots.length === 1;
     const fit = isSingle ? cfg.display.fitSingle : crop > cfg.display.maxCrop ? 'contain' : 'cover';
+    let pic = null;
+    if (item.type === 'image') {
+      // Photos sit in a frame so a slow pan & zoom can move the picture inside it
+      // while the frame (and its rounded corners) stays put.
+      pic = main;
+      pic.className = 'pic';
+      pic.style.objectFit = fit;
+      main = div('');
+      main.appendChild(pic);
+    }
     main.className = 'main';
-    main.style.objectFit = fit;
+    if (!pic) main.style.objectFit = fit;
+    if (fit === 'contain') {
+      // Size the element to exactly the visible picture (see .fitted in style.css),
+      // so rounded corners land on the photo itself rather than on the black around it.
+      main.classList.add('fitted');
+      main.style.setProperty('--ar', aspect.toFixed(5));
+    }
+    // Round the corners of every photo except one that fills the whole screen.
+    const fillsScreen = isSingle && (fit === 'cover' || crop < 0.01);
+    if (!fillsScreen) main.classList.add('rounded');
 
     if (fit === 'contain' && cfg.display.blurredBackdrop && item.type === 'image') {
       const bd = new Image();
@@ -131,7 +150,7 @@
     }
     wrap.appendChild(main);
     updateCaption(wrap, item);
-    return { node: wrap, main, video, item };
+    return { node: wrap, main, pic, video, item };
   }
 
   function releaseVideo(v) {
@@ -139,13 +158,23 @@
   }
   function releaseMedia(media) {
     if (!media) return;
+    if (media === kenBurnsMedia) kenBurnsMedia = null;
     if (media.video) releaseVideo(media.video);
     media.node.remove();
   }
 
+  // Slow pan & zoom: only now and then, only on smaller photos, one at a time.
+  let kenBurnsMedia = null;
+  function wantsKenBurns(slot, media) {
+    const kb = cfg.display.kenBurns;
+    if (!kb || !kb.enabled || kb.maxZoom <= 1 || !media.pic) return false;
+    if (kenBurnsMedia && kenBurnsMedia.node.isConnected) return false; // one is already moving
+    if (slot.area > kb.maxPhotoSize) return false;
+    return Math.random() < kb.chance;
+  }
+
   function kenBurns(el) {
     const kb = cfg.display.kenBurns;
-    if (!kb || !kb.enabled || kb.maxZoom <= 1) return;
     const z = 1 + (kb.maxZoom - 1) * (0.5 + Math.random() * 0.5);
     const shift = (((z - 1) / 2) * 100) / z;
     const dx = (Math.random() * 2 - 1) * shift;
@@ -170,8 +199,9 @@
         const secs = isFinite(d) && d > 0 ? Math.min(d, cfg.video.maxSeconds) : cfg.video.maxSeconds;
         busyUntil = now + secs * 1000;
       }
-    } else {
-      kenBurns(media.main);
+    } else if (wantsKenBurns(slot, media)) {
+      kenBurnsMedia = media;
+      kenBurns(media.pic);
     }
     slot.current = { media, item: media.item, shownAt: now, busyUntil };
   }

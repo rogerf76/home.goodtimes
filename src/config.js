@@ -66,9 +66,9 @@ const DEFAULTS = {
     gap: 6,
     cornerRadius: 0,
     fitSingle: 'contain',
-    maxCrop: 0.4,
-    blurredBackdrop: true,
-    kenBurns: { enabled: true, maxZoom: 1.12 },
+    maxCrop: 0,
+    blurredBackdrop: false,
+    kenBurns: { enabled: true, chance: 0.3, maxPhotoSize: 0.4, maxZoom: 1.15 },
     preventSleep: true,
   },
 
