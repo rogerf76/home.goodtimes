@@ -79,7 +79,9 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+  transition: opacity 0.6s;
 }
+.caption.hidden { opacity: 0; }
 
 #status {
   position: fixed;

@@ -86,6 +86,29 @@
     el.textContent = text;
   }
 
+  // Each distinct caption appears only once on screen: on the photo carrying it that
+  // sits closest to the bottom-left corner. Photos sharing the same album, day and
+  // place therefore show a single title between them.
+  function refreshCaptions() {
+    if (!stage) return;
+    const best = new Map(); // caption text -> { slot, dist }
+    for (const s of stage.slots) {
+      if (!s.current) continue;
+      updateCaption(s.current.media.node, s.current.item);
+      const text = captionText(s.current.item);
+      if (!text) continue;
+      const r = s.rect;
+      const dist = Math.hypot(r.x, 1 - (r.y + r.h)); // slot's bottom-left to screen's bottom-left
+      const prev = best.get(text);
+      if (!prev || dist < prev.dist) best.set(text, { slot: s, dist });
+    }
+    const shown = new Set([...best.values()].map((b) => b.slot));
+    for (const s of stage.slots) {
+      const el = s.current && s.current.media.node.querySelector('.caption');
+      if (el) el.classList.toggle('hidden', !shown.has(s));
+    }
+  }
+
   async function createMedia(item, slot) {
     const wrap = div('media');
     let main;
@@ -204,6 +227,7 @@
       kenBurns(media.pic);
     }
     slot.current = { media, item: media.item, shownAt: now, busyUntil };
+    if (slot.stage === stage) refreshCaptions();
   }
 
   // Load media for a slot, replacing items that fail to load.
@@ -524,11 +548,7 @@
     if (!ev) return;
     ev.place = place;
     // Photos from this event that are already on screen get the place name straight away.
-    if (stage) {
-      for (const s of stage.slots) {
-        if (s.current && s.current.item.event === ev) updateCaption(s.current.media.node, s.current.item);
-      }
-    }
+    refreshCaptions();
   });
 
   showStatus('Scanning folders…');
