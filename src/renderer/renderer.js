@@ -251,14 +251,14 @@
   }
 
   // Load media for a slot, replacing items that fail to load.
-  async function prepareFor(slot, item, allowVideo, exclude) {
+  async function prepareFor(slot, item, accept, exclude) {
     for (let tries = 0; item && tries < 5; tries++) {
       try {
         return await createMedia(item, slot);
       } catch (e) {
         log(`skipping ${item.name}: ${e.message}`);
         playlist.markBroken(item);
-        item = playlist.take(slot.aspect, { allowVideo, exclude });
+        item = playlist.take(slot.aspect, { accept, exclude });
       }
     }
     return null;
@@ -331,20 +331,28 @@
     return layout.slots.map((r) => ({ aspect: (W * r.w) / (H * r.h), area: r.w * r.h }));
   }
 
-  // video.fullScreen: videos never share the screen. When one comes up next it gets
-  // this full-screen layout to itself, then the slideshow moves on to a new layout.
+  // Some items never share the screen: videos when video.fullScreen is on, and very wide
+  // photos (display.wideFullScreen). When one comes up next it gets this full-screen
+  // layout to itself, then the slideshow moves on to a new layout.
   const videoFull = !!cfg.video.fullScreen;
-  const VIDEO_LAYOUT = { name: 'video', weight: 0, slots: [{ x: 0, y: 0, w: 1, h: 1 }] };
-  const videoIsNext = () => {
-    if (!videoFull) return false;
+  const wideLimit = Number(cfg.display.wideFullScreen) || 0;
+  const isSolo = (it) => (it.type === 'video'
+    ? videoFull
+    : wideLimit > 0 && !!it.aspect && it.aspect > wideLimit);
+  const SOLO_LAYOUT = { name: 'solo', weight: 0, slots: [{ x: 0, y: 0, w: 1, h: 1 }] };
+  const soloIsNext = () => {
     const next = playlist.peek(1)[0];
-    return !!next && next.type === 'video';
+    return !!next && isSolo(next);
   };
-  const videosAllowedInTiles = (videosOnScreen) => !videoFull && videosOnScreen < cfg.video.maxOnScreen;
+  // Which items may go into a tile, given how many videos are already on screen.
+  const tileFilter = (videosOnScreen) => (it) => !isSolo(it)
+    && (it.type !== 'video' || videosOnScreen < cfg.video.maxOnScreen);
+  const photoTile = tileFilter(Infinity);
 
   function usableCount(items) {
-    const videos = items.filter((i) => i.type === 'video').length;
-    return items.length - videos + (videoFull ? 0 : Math.min(videos, cfg.video.maxOnScreen));
+    const tiles = items.filter((i) => !isSolo(i));
+    const videos = tiles.filter((i) => i.type === 'video').length;
+    return tiles.length - videos + Math.min(videos, cfg.video.maxOnScreen);
   }
 
   function chooseLayout() {
@@ -355,7 +363,7 @@
     let candidates = layouts.filter((l) => l.slots.length <= Math.max(1, available));
     if (!candidates.length) candidates = [layouts.reduce((a, b) => (a.slots.length <= b.slots.length ? a : b))];
 
-    const windowItems = upcoming.slice(0, look);
+    const windowItems = upcoming.filter((i) => !isSolo(i)).slice(0, look);
     const scored = candidates.map((l) => {
       // Simulate filling the slots, biggest first, to see how well upcoming photos fit.
       const pool = [...windowItems];
@@ -389,8 +397,8 @@
     if (playlist.remaining() === 0) playlist.advanceEvent();
     if (playlist.isEmpty) return;
 
-    const forVideo = videoIsNext();
-    const layout = forVideo ? VIDEO_LAYOUT : chooseLayout();
+    const solo = soloIsNext();
+    const layout = solo ? SOLO_LAYOUT : chooseLayout();
     const ns = createStage(layout);
 
     // Assign items, biggest slots first.
@@ -399,13 +407,13 @@
     const order = [...ns.slots].sort((a, b) => b.area - a.area);
     const jobs = [];
     for (const s of order) {
-      const item = forVideo
-        ? playlist.take(s.aspect, { only: 'video', exclude })
-        : playlist.take(s.aspect, { allowVideo: videosAllowedInTiles(videos), exclude });
+      const item = solo
+        ? playlist.take(s.aspect, { accept: isSolo, exclude })
+        : playlist.take(s.aspect, { accept: tileFilter(videos), exclude });
       if (!item) break;
       exclude.add(item.url);
       if (item.type === 'video') videos++;
-      jobs.push(prepareFor(s, item, false, exclude).then((m) => { s.prepared = m; }));
+      jobs.push(prepareFor(s, item, photoTile, exclude).then((m) => { s.prepared = m; }));
     }
     await Promise.all(jobs);
     const filled = ns.slots.filter((s) => s.prepared);
@@ -418,7 +426,7 @@
     root.appendChild(ns.el);
     const old = stage;
     stage = ns;
-    if (!forVideo) lastLayoutName = layout.name;
+    if (!solo) lastLayoutName = layout.name;
     const albumName = filled[0].prepared.item.event && filled[0].prepared.item.event.album;
     log(`layout ${layout.name}: ${filled.length} item(s)${albumName ? ` from ${albumName}` : ''}`);
 
@@ -451,8 +459,9 @@
     }
     ns.slots.forEach((s) => { delete s.prepared; });
     destroyStage(old);
-    // A full-screen video moves on to a new layout as soon as it has finished playing.
-    layoutEndsAt = Date.now() + (forVideo ? 0 : rand(cfg.timing.layoutDuration) * 1000);
+    // A solo item moves on to a new layout as soon as it's done: a video once it has
+    // finished playing, a wide photo after one normal interval.
+    layoutEndsAt = Date.now() + (solo ? 0 : rand(cfg.timing.layoutDuration) * 1000);
   }
 
   // ---------- partial updates ----------
@@ -460,7 +469,7 @@
     try {
       const owner = slot.stage;
       const exclude = new Set(onScreenUrls());
-      const media = await prepareFor(slot, item, false, exclude);
+      const media = await prepareFor(slot, item, photoTile, exclude);
       if (!media) return;
       if (stage !== owner) { releaseMedia(media); return; } // layout changed meanwhile
       // Neighbours glide to re-align around the new photo while it transitions in.
@@ -497,7 +506,7 @@
       const now = Date.now();
       const videoBusy = stage.slots.some((s) => s.current && s.current.busyUntil > now);
       const swapping = stage.slots.some((s) => s.swapping);
-      const wantLayout = forceLayout || now >= layoutEndsAt || videoIsNext();
+      const wantLayout = forceLayout || now >= layoutEndsAt || soloIsNext();
 
       if (wantLayout) {
         if (!videoBusy && !swapping) {
@@ -524,7 +533,7 @@
       let delay = 0;
 
       for (const slot of chosen) {
-        const item = playlist.take(slot.aspect, { allowVideo: videosAllowedInTiles(videos), exclude });
+        const item = playlist.take(slot.aspect, { accept: tileFilter(videos), exclude });
         if (!item) {
           if (playlist.keepTogether) { forceLayout = true; next = 0.5; }
           break;

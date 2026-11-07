@@ -123,6 +123,8 @@ display:
   alignPhotos: 0.1            # let photos grow or shrink by up to this much (0.1 = 10%) so their
                               # edges line up with neighbouring photos. Never crops or distorts.
                               # 0 = off
+  wideFullScreen: 1.96        # photos wider than this aspect ratio always get the whole screen to
+                              # themselves (16:9 = 1.78, so 1.96 = 10% wider than 16:9). 0 = off
   blurredBackdrop: false      # fill the space around a whole photo with a blurred copy (false = black)
   kenBurns:                   # slow pan & zoom inside the photo's frame
     enabled: true

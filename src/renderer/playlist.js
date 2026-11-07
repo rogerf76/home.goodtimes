@@ -214,7 +214,7 @@ class Playlist {
 
   /**
    * Take the best item for a slot of the given aspect ratio.
-   * opts.allowVideo, opts.exclude (Set of urls already on screen).
+   * opts.accept (item => bool, which items may go here), opts.exclude (Set of urls already on screen).
    * Returns null when the current event is used up (keepTogether) or nothing fits.
    */
   take(slotAspect, opts = {}) {
@@ -223,9 +223,9 @@ class Playlist {
       if (this.keepTogether) return null;
       this.advanceEvent();
     }
-    const { allowVideo = true, exclude = null, only = null } = opts;
+    const { accept = () => true, exclude = null } = opts;
     const look = Math.max(1, this.cfg.layouts.lookahead);
-    const ok = (it) => (only ? it.type === only : allowVideo || it.type !== 'video') && !(exclude && exclude.has(it.url));
+    const ok = (it) => accept(it) && !(exclude && exclude.has(it.url));
 
     let best = -1;
     let bestCost = Infinity;
@@ -239,7 +239,7 @@ class Playlist {
     if (best < 0) best = this.buffer.findIndex(ok);
     if (best < 0) {
       // Only excluded items left (e.g. tiny library) – allow repeats of on-screen items rather than stall.
-      best = this.buffer.findIndex((it) => (only ? it.type === only : allowVideo || it.type !== 'video'));
+      best = this.buffer.findIndex(accept);
       if (best < 0) return null;
     }
     return this.buffer.splice(best, 1)[0];
