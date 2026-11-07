@@ -23,6 +23,7 @@ const DEFAULTS = {
     maxDistanceKm: 30,
     keepEventsTogether: true,
     albumVisit: [2, 4],
+    mixAlbumDays: true,
   },
 
   timing: {

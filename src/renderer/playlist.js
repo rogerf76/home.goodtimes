@@ -152,9 +152,24 @@ class Playlist {
       const ev = this.events[this.order[this.pos]];
       if (!ev.items.length) continue;
       this.buffer = ev.virtual ? SS.shuffle([...ev.items]) : [...ev.items];
+      this.joinAlbumDays(ev);
       return;
     }
     this.buffer = [];
+  }
+
+  // Within an album the whole trip counts as one event for layouts: the following
+  // days of the same album (up to the end of this visit) are queued straight after,
+  // so layouts can mix photos from neighbouring days instead of being stuck on
+  // single photos when a day only has one or two.
+  joinAlbumDays(ev) {
+    if (!ev.album || !this.cfg.grouping.mixAlbumDays) return;
+    while (this.pos + 1 < this.order.length) {
+      const next = this.events[this.order[this.pos + 1]];
+      if (next.unit !== ev.unit) break;
+      this.pos++;
+      this.buffer.push(...next.items);
+    }
   }
 
   ensureBuffer() {

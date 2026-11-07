@@ -304,6 +304,8 @@
     const old = stage;
     stage = ns;
     lastLayoutName = layout.name;
+    const albumName = filled[0].prepared.item.event && filled[0].prepared.item.event.album;
+    log(`layout ${layout.name}: ${filled.length} photo(s)${albumName ? ` from ${albumName}` : ''}`);
 
     const perSlot = old && ns.slots.length > 1 && Math.random() < cfg.transitions.layout.perSlotChance;
     if (perSlot) {
