@@ -207,9 +207,9 @@ class Playlist {
       if (this.keepTogether) return null;
       this.advanceEvent();
     }
-    const { allowVideo = true, exclude = null } = opts;
+    const { allowVideo = true, exclude = null, only = null } = opts;
     const look = Math.max(1, this.cfg.layouts.lookahead);
-    const ok = (it) => (allowVideo || it.type !== 'video') && !(exclude && exclude.has(it.url));
+    const ok = (it) => (only ? it.type === only : allowVideo || it.type !== 'video') && !(exclude && exclude.has(it.url));
 
     let best = -1;
     let bestCost = Infinity;
@@ -223,7 +223,7 @@ class Playlist {
     if (best < 0) best = this.buffer.findIndex(ok);
     if (best < 0) {
       // Only excluded items left (e.g. tiny library) – allow repeats of on-screen items rather than stall.
-      best = this.buffer.findIndex((it) => allowVideo || it.type !== 'video');
+      best = this.buffer.findIndex((it) => (only ? it.type === only : allowVideo || it.type !== 'video'));
       if (best < 0) return null;
     }
     return this.buffer.splice(best, 1)[0];

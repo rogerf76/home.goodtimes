@@ -77,6 +77,7 @@ const DEFAULTS = {
     enabled: true,
     muted: true,
     volume: 0.6,
+    fullScreen: true,
     maxOnScreen: 1,
     playToEnd: true,
     maxSeconds: 60,

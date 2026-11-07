@@ -311,9 +311,20 @@
     return layout.slots.map((r) => ({ aspect: (W * r.w) / (H * r.h), area: r.w * r.h }));
   }
 
+  // video.fullScreen: videos never share the screen. When one comes up next it gets
+  // this full-screen layout to itself, then the slideshow moves on to a new layout.
+  const videoFull = !!cfg.video.fullScreen;
+  const VIDEO_LAYOUT = { name: 'video', weight: 0, slots: [{ x: 0, y: 0, w: 1, h: 1 }] };
+  const videoIsNext = () => {
+    if (!videoFull) return false;
+    const next = playlist.peek(1)[0];
+    return !!next && next.type === 'video';
+  };
+  const videosAllowedInTiles = (videosOnScreen) => !videoFull && videosOnScreen < cfg.video.maxOnScreen;
+
   function usableCount(items) {
     const videos = items.filter((i) => i.type === 'video').length;
-    return items.length - videos + Math.min(videos, cfg.video.maxOnScreen);
+    return items.length - videos + (videoFull ? 0 : Math.min(videos, cfg.video.maxOnScreen));
   }
 
   function chooseLayout() {
@@ -358,7 +369,8 @@
     if (playlist.remaining() === 0) playlist.advanceEvent();
     if (playlist.isEmpty) return;
 
-    const layout = chooseLayout();
+    const forVideo = videoIsNext();
+    const layout = forVideo ? VIDEO_LAYOUT : chooseLayout();
     const ns = createStage(layout);
 
     // Assign items, biggest slots first.
@@ -367,8 +379,9 @@
     const order = [...ns.slots].sort((a, b) => b.area - a.area);
     const jobs = [];
     for (const s of order) {
-      const allowVideo = videos < cfg.video.maxOnScreen;
-      const item = playlist.take(s.aspect, { allowVideo, exclude });
+      const item = forVideo
+        ? playlist.take(s.aspect, { only: 'video', exclude })
+        : playlist.take(s.aspect, { allowVideo: videosAllowedInTiles(videos), exclude });
       if (!item) break;
       exclude.add(item.url);
       if (item.type === 'video') videos++;
@@ -385,9 +398,9 @@
     root.appendChild(ns.el);
     const old = stage;
     stage = ns;
-    lastLayoutName = layout.name;
+    if (!forVideo) lastLayoutName = layout.name;
     const albumName = filled[0].prepared.item.event && filled[0].prepared.item.event.album;
-    log(`layout ${layout.name}: ${filled.length} photo(s)${albumName ? ` from ${albumName}` : ''}`);
+    log(`layout ${layout.name}: ${filled.length} item(s)${albumName ? ` from ${albumName}` : ''}`);
 
     const perSlot = old && ns.slots.length > 1 && Math.random() < cfg.transitions.layout.perSlotChance;
     if (perSlot) {
@@ -418,7 +431,8 @@
     }
     ns.slots.forEach((s) => { delete s.prepared; });
     destroyStage(old);
-    layoutEndsAt = Date.now() + rand(cfg.timing.layoutDuration) * 1000;
+    // A full-screen video moves on to a new layout as soon as it has finished playing.
+    layoutEndsAt = Date.now() + (forVideo ? 0 : rand(cfg.timing.layoutDuration) * 1000);
   }
 
   // ---------- partial updates ----------
@@ -463,7 +477,7 @@
       const now = Date.now();
       const videoBusy = stage.slots.some((s) => s.current && s.current.busyUntil > now);
       const swapping = stage.slots.some((s) => s.swapping);
-      const wantLayout = forceLayout || now >= layoutEndsAt;
+      const wantLayout = forceLayout || now >= layoutEndsAt || videoIsNext();
 
       if (wantLayout) {
         if (!videoBusy && !swapping) {
@@ -490,7 +504,7 @@
       let delay = 0;
 
       for (const slot of chosen) {
-        const item = playlist.take(slot.aspect, { allowVideo: videos < cfg.video.maxOnScreen, exclude });
+        const item = playlist.take(slot.aspect, { allowVideo: videosAllowedInTiles(videos), exclude });
         if (!item) {
           if (playlist.keepTogether) { forceLayout = true; next = 0.5; }
           break;
