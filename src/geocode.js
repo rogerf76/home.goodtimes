@@ -13,7 +13,7 @@ function loadCache(file) {
 
 function placeName(addr) {
   if (!addr) return null;
-  const local = addr.village || addr.town || addr.city || addr.hamlet || addr.suburb || addr.municipality || addr.county;
+  const local = addr.city || addr.town || addr.village || addr.hamlet || addr.suburb || addr.municipality || addr.county;
   const region = addr.state || addr.region;
   const parts = [local, local ? null : region, addr.country].filter(Boolean);
   return parts.length ? [...new Set(parts)].join(', ') : null;
@@ -30,7 +30,7 @@ async function geocodeEvents(events, cfg, onLabel) {
     const key = `${ev.lat.toFixed(2)},${ev.lon.toFixed(2)}`;
     if (!(key in cache)) {
       try {
-        const url = `${ENDPOINT}?format=jsonv2&zoom=12&lat=${ev.lat}&lon=${ev.lon}&accept-language=${encodeURIComponent(cfg.geocoding.language)}`;
+        const url = `${ENDPOINT}?format=jsonv2&zoom=14&lat=${ev.lat}&lon=${ev.lon}&accept-language=${encodeURIComponent(cfg.geocoding.language)}`;
         const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
         cache[key] = res.ok ? placeName((await res.json()).address) : null;
         dirty = true;

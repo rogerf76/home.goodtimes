@@ -66,17 +66,23 @@
   }
 
   // ---------- media elements ----------
-  function captionFor(item) {
+  function captionText(item) {
     const c = cfg.captions;
-    if (!c.enabled) return null;
+    if (!c.enabled) return '';
     const parts = [];
     if (c.showDate && item.date) parts.push(dateFmt.format(new Date(item.date)));
     if (c.showPlace && item.event && item.event.place) parts.push(item.event.place);
     if (c.showFilename) parts.push(item.name);
-    if (!parts.length) return null;
-    const el = div('caption');
-    el.textContent = parts.join('  ·  ');
-    return el;
+    return parts.join('  ·  ');
+  }
+
+  // Creates or refreshes the caption inside a media wrapper.
+  function updateCaption(wrap, item) {
+    const text = captionText(item);
+    let el = wrap.querySelector('.caption');
+    if (!text) { if (el) el.remove(); return; }
+    if (!el) { el = div('caption'); wrap.appendChild(el); }
+    el.textContent = text;
   }
 
   async function createMedia(item, slot) {
@@ -123,8 +129,7 @@
       wrap.appendChild(bd);
     }
     wrap.appendChild(main);
-    const cap = captionFor(item);
-    if (cap) wrap.appendChild(cap);
+    updateCaption(wrap, item);
     return { node: wrap, main, video, item };
   }
 
@@ -482,7 +487,14 @@
   goodtimes.onLibrary(applyLibrary);
   goodtimes.onPlace(({ id, place }) => {
     const ev = eventsById.get(id);
-    if (ev) ev.place = place;
+    if (!ev) return;
+    ev.place = place;
+    // Photos from this event that are already on screen get the place name straight away.
+    if (stage) {
+      for (const s of stage.slots) {
+        if (s.current && s.current.item.event === ev) updateCaption(s.current.media.node, s.current.item);
+      }
+    }
   });
 
   showStatus('Scanning folders…');
