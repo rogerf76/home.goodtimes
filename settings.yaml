@@ -47,7 +47,8 @@ grouping:
   maxDistanceKm: 30           # moving further than this (GPS) starts a new event
   keepEventsTogether: true    # never mix photos from different events on screen
   mixAlbumDays: true          # ...except within an album (subfolder): photos from different
-                              # days of the same trip can share a layout
+                              # days of the same trip can share a layout...
+  mixAlbumMaxKm: 150          # ...as long as they're within this distance of each other
   # shuffle-events only: how many events (usually days) of an album to show before
   # moving on to something else. The album carries on, in order, on a later visit.
   # Use 'all' to play each album start to finish in one go.

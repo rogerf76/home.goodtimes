@@ -24,6 +24,7 @@ const DEFAULTS = {
     keepEventsTogether: true,
     albumVisit: [2, 4],
     mixAlbumDays: true,
+    mixAlbumMaxKm: 150,
   },
 
   timing: {

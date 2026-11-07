@@ -13,6 +13,14 @@ SS.shuffle = function shuffle(a) {
 };
 
 const DEFAULT_ASPECT = 1.5;
+
+SS.distanceKm = function distanceKm(a, b) {
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLon = toRad(b.lon - a.lon);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(s));
+};
 SS.aspectCost = (itemAspect, slotAspect) => Math.abs(Math.log((itemAspect || DEFAULT_ASPECT) / slotAspect));
 
 class Playlist {
@@ -162,11 +170,19 @@ class Playlist {
   // days of the same album (up to the end of this visit) are queued straight after,
   // so layouts can mix photos from neighbouring days instead of being stuck on
   // single photos when a day only has one or two.
+  // Days only join while they're near each other: a trip that moves on (e.g. from
+  // Alberta to California) starts a fresh screen rather than mixing the two.
   joinAlbumDays(ev) {
     if (!ev.album || !this.cfg.grouping.mixAlbumDays) return;
+    const maxKm = this.cfg.grouping.mixAlbumMaxKm;
+    let lastLoc = ev.lat != null ? ev : null;
     while (this.pos + 1 < this.order.length) {
       const next = this.events[this.order[this.pos + 1]];
       if (next.unit !== ev.unit) break;
+      if (next.lat != null) {
+        if (lastLoc && maxKm > 0 && SS.distanceKm(lastLoc, next) > maxKm) break;
+        lastLoc = next;
+      }
       this.pos++;
       this.buffer.push(...next.items);
     }

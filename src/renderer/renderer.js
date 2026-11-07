@@ -66,47 +66,68 @@
   }
 
   // ---------- media elements ----------
-  function captionText(item) {
+  // One caption for the whole screen, fixed to the bottom-left corner, describing
+  // everything currently shown:
+  //   Album · Date · Place
+  //   Album · Date · Banff, Canmore, Alberta               (several places, same day)
+  //   Album · Date · Alameda, California | Vancouver, British Columbia  (different states)
+  //   Album · Date 1 · Place 1 | Date 2 · Place 2          (different days)
+  const SEP = '  ·  ';
+  const DAY_SEP = '  |  ';
+
+  // "Banff, Alberta" + "Canmore, Alberta" -> "Banff, Canmore, Alberta"
+  function joinPlaces(places) {
+    const byRegion = new Map();
+    for (const p of places) {
+      const i = p.indexOf(', ');
+      const local = i < 0 ? p : p.slice(0, i);
+      const region = i < 0 ? '' : p.slice(i + 2);
+      if (!byRegion.has(region)) byRegion.set(region, []);
+      if (!byRegion.get(region).includes(local)) byRegion.get(region).push(local);
+    }
+    // A bare region ("Alberta") adds nothing when a town in that region is also listed.
+    const bare = byRegion.get('') || [];
+    for (const r of bare.filter((x) => byRegion.has(x))) bare.splice(bare.indexOf(r), 1);
+    if (byRegion.has('') && !bare.length) byRegion.delete('');
+    return [...byRegion].map(([region, locals]) => [...locals, region].filter(Boolean).join(', ')).join('  |  ');
+  }
+
+  function screenCaption(items) {
     const c = cfg.captions;
-    if (!c.enabled) return '';
-    const parts = [];
-    if (c.showAlbum && item.event && item.event.album) parts.push(item.event.album);
-    if (c.showDate && item.date) parts.push(dateFmt.format(new Date(item.date)));
-    if (c.showPlace && item.event && item.event.place) parts.push(item.event.place);
-    if (c.showFilename) parts.push(item.name);
-    return parts.join('  ·  ');
+    if (!c.enabled || !items.length) return '';
+    const byAlbum = new Map(); // album -> Map(dayKey -> { date, places[] })
+    for (const it of [...items].sort((x, y) => x.date - y.date)) {
+      const album = (c.showAlbum && it.event && it.event.album) || '';
+      if (!byAlbum.has(album)) byAlbum.set(album, new Map());
+      const days = byAlbum.get(album);
+      const day = c.showDate && it.date ? dateFmt.format(new Date(it.date)) : '';
+      if (!days.has(day)) days.set(day, []);
+      const place = c.showPlace && it.event && it.event.place;
+      if (place && !days.get(day).includes(place)) days.get(day).push(place);
+    }
+    const segments = [...byAlbum].map(([album, days]) => {
+      const dayTexts = [...days].map(([day, places]) => [day, places.length ? joinPlaces(places) : ''].filter(Boolean).join(SEP)).filter(Boolean);
+      return [album, dayTexts.join(DAY_SEP)].filter(Boolean).join(SEP);
+    });
+    let text = segments.filter(Boolean).join(DAY_SEP);
+    if (c.showFilename && items.length === 1) text = [text, items[0].name].filter(Boolean).join(SEP);
+    return text;
   }
 
-  // Creates or refreshes the caption inside a media wrapper.
-  function updateCaption(wrap, item) {
-    const text = captionText(item);
-    let el = wrap.querySelector('.caption');
-    if (!text) { if (el) el.remove(); return; }
-    if (!el) { el = div('caption'); wrap.appendChild(el); }
-    el.textContent = text;
-  }
-
-  // Each distinct caption appears only once on screen: on the photo carrying it that
-  // sits closest to the bottom-left corner. Photos sharing the same album, day and
-  // place therefore show a single title between them.
+  const captionEl = document.getElementById('caption');
+  let captionTimer = null;
   function refreshCaptions() {
     if (!stage) return;
-    const best = new Map(); // caption text -> { slot, dist }
-    for (const s of stage.slots) {
-      if (!s.current) continue;
-      updateCaption(s.current.media.node, s.current.item);
-      const text = captionText(s.current.item);
-      if (!text) continue;
-      const r = s.rect;
-      const dist = Math.hypot(r.x, 1 - (r.y + r.h)); // slot's bottom-left to screen's bottom-left
-      const prev = best.get(text);
-      if (!prev || dist < prev.dist) best.set(text, { slot: s, dist });
-    }
-    const shown = new Set([...best.values()].map((b) => b.slot));
-    for (const s of stage.slots) {
-      const el = s.current && s.current.media.node.querySelector('.caption');
-      if (el) el.classList.toggle('hidden', !shown.has(s));
-    }
+    const text = screenCaption(stage.slots.filter((s) => s.current).map((s) => s.current.item));
+    if (text === captionEl.dataset.text) return;
+    captionEl.dataset.text = text;
+    // Cross-fade to the new text.
+    captionEl.classList.add('hidden');
+    clearTimeout(captionTimer);
+    captionTimer = setTimeout(() => {
+      captionEl.textContent = text;
+      captionEl.classList.toggle('hidden', !text);
+    }, captionEl.textContent ? 400 : 0);
   }
 
   async function createMedia(item, slot) {
@@ -172,7 +193,6 @@
       wrap.appendChild(bd);
     }
     wrap.appendChild(main);
-    updateCaption(wrap, item);
     return { node: wrap, main, pic, video, item };
   }
 
