@@ -153,7 +153,7 @@
       video = document.createElement('video');
       video.muted = cfg.video.muted;
       video.volume = Math.max(0, Math.min(1, cfg.video.volume));
-      video.loop = true;
+      video.loop = false; // replays are counted in activate()
       video.playsInline = true;
       video.preload = 'auto';
       video.src = item.url;
@@ -214,6 +214,7 @@
   }
   function releaseMedia(media) {
     if (!media) return;
+    clearTimeout(media.cutoff);
     if (media.video) releaseVideo(media.video);
     media.node.remove();
   }
@@ -223,13 +224,26 @@
     const now = Date.now();
     let busyUntil = 0;
     if (media.video) {
-      const p = media.video.play();
+      const v = media.video;
+      const p = v.play();
       if (p) p.catch(() => {});
-      if (paused) media.video.pause();
-      const d = media.video.duration;
-      if (cfg.video.playToEnd) {
-        const secs = isFinite(d) && d > 0 ? Math.min(d, cfg.video.maxSeconds) : cfg.video.maxSeconds;
-        busyUntil = now + secs * 1000;
+      if (paused) v.pause();
+      // Short clips replay a few times; anything longer plays once. Then it's replaced.
+      const d = v.duration;
+      const known = isFinite(d) && d > 0;
+      const plays = known && d <= cfg.video.loopMaxSeconds ? Math.max(1, cfg.video.maxPlays) : 1;
+      const secs = known ? Math.min(d * plays, cfg.video.maxSeconds) : cfg.video.maxSeconds;
+      if (cfg.video.playToEnd) busyUntil = now + secs * 1000;
+      media.played = 1;
+      v.addEventListener('ended', () => {
+        if (media.played < plays) {
+          media.played++;
+          v.currentTime = 0;
+          v.play().catch(() => {});
+        } else videoDone(slot, media);
+      });
+      if (!known || d * plays > cfg.video.maxSeconds) {
+        media.cutoff = setTimeout(() => videoDone(slot, media), cfg.video.maxSeconds * 1000);
       }
     }
     slot.current = { media, item: media.item, shownAt: now, busyUntil };
@@ -238,6 +252,25 @@
   }
 
   const lastShown = new Map(); // url -> when it last went on screen
+
+  // A video has played as often as it's allowed to (or hit video.maxSeconds): stop it
+  // and put something else in its place.
+  function videoDone(slot, media) {
+    if (media.done || !slot.current || slot.current.media !== media) return; // already handled
+    clearTimeout(media.cutoff);
+    if (paused || stepping || slot.swapping) { // try again in a moment
+      media.cutoff = setTimeout(() => videoDone(slot, media), 1000);
+      return;
+    }
+    media.done = true;
+    media.video.pause();
+    media.video.dataset.done = '1';
+    slot.current.busyUntil = 0;
+    if (slot.stage !== stage) return;
+    if (stage.layout === SOLO_LAYOUT) { schedule(0.3); return; } // full-screen video: next layout
+    const secs = Math.round(media.video.currentTime || 0);
+    replaceSlot(slot, Date.now(), `${media.item.name} done (${media.played}× ${secs}s), replaced with`);
+  }
 
   // Load media for a slot, replacing items that fail to load.
   async function prepareFor(slot, item, accept, exclude) {
@@ -534,26 +567,31 @@
     });
   }
 
-  // The playlist has nothing left for this event, so re-show the photo from the
-  // on-screen events that was shown longest ago; failing that, borrow from the next event.
   function swapBesideVideo(now) {
     const slots = stage.slots.filter((s) => !s.swapping && s.current && !(s.current.busyUntil > now));
     if (!slots.length) return;
-    const slot = slots[Math.floor(Math.random() * slots.length)];
+    replaceSlot(slots[Math.floor(Math.random() * slots.length)], now, 'beside video');
+  }
+
+  // Replace one spot's photo/video outside the normal rhythm. Takes the next suitable item
+  // from the playlist; if this event has none left, re-shows the photo from the on-screen
+  // events that was shown longest ago; failing that, borrows from the next event.
+  function replaceSlot(slot, now, why) {
+    const otherVideos = stage.slots.filter((s) => s !== slot && s.current && s.current.item.type === 'video').length;
+    const accept = tileFilter(otherVideos, stage.slots.length === 1);
     const onScreen = new Set(onScreenUrls());
-    const accept = (it) => it.type !== 'video' && !isSolo(it) && !(stage.slots.length === 1 && isPortrait(it));
     let item = playlist.take(slot.aspect, { accept, exclude: onScreen });
     if (!item) {
       const events = new Set(stage.slots.filter((s) => s.current).map((s) => s.current.item.event));
       const pool = [...events].filter(Boolean).flatMap((ev) => ev.items)
-        .filter((it) => accept(it) && !onScreen.has(it.url));
+        .filter((it) => it.type !== 'video' && accept(it) && !onScreen.has(it.url));
       // Prefer photos not seen for a while, then ones that suit the spot's shape.
       const score = (it) => SS.aspectCost(it.aspect, slot.aspect) - (now - (lastShown.get(it.url) || 0)) / 60000;
       item = pool.sort((a, b) => score(a) - score(b))[0];
     }
     if (!item) item = playlist.take(slot.aspect, { accept, exclude: onScreen, spill: true });
     if (!item) return;
-    log(`beside video: ${item.name}`);
+    log(`${why}: ${item.name}`);
     slot.swapping = true;
     const type = SS.pickTransition(cfg.transitions.slot.types);
     swapSlot(slot, item, type, rand(cfg.transitions.slot.duration) * 1000)
@@ -648,7 +686,10 @@
   function setPaused(p) {
     paused = p;
     document.getAnimations().forEach((a) => (p ? a.pause() : a.play()));
-    document.querySelectorAll('video').forEach((v) => (p ? v.pause() : v.play().catch(() => {})));
+    document.querySelectorAll('video').forEach((v) => {
+      if (p) v.pause();
+      else if (!v.dataset.done) v.play().catch(() => {});
+    });
     if (p) clearTimeout(timer);
     else schedule(1);
     toast(p ? 'Paused' : 'Playing');

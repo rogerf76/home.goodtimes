@@ -139,6 +139,9 @@ video:
   maxOnScreen: 1              # (tiles only) max videos playing at the same time
   playToEnd: true             # don't replace a video until it has finished...
   maxSeconds: 60              # ...or played this long (long videos are cut off)
+  maxPlays: 3                 # short clips play up to this many times in a row...
+  loopMaxSeconds: 5           # ...if they're this long or shorter; longer videos play once.
+                              # Then the video is replaced by another photo or video.
   changePhotosAfter: 20       # while a video longer than this (seconds) plays, the other photos
                               # on screen keep changing now and then. 0 = they wait for the video
 
