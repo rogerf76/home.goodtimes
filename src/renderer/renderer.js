@@ -233,8 +233,11 @@
       }
     }
     slot.current = { media, item: media.item, shownAt: now, busyUntil };
+    lastShown.set(media.item.url, now);
     if (slot.stage === stage) refreshCaptions();
   }
+
+  const lastShown = new Map(); // url -> when it last went on screen
 
   // Load media for a slot, replacing items that fail to load.
   async function prepareFor(slot, item, accept, exclude) {
@@ -520,6 +523,43 @@
     if (!paused) timer = setTimeout(step, seconds * 1000);
   }
 
+  // ---------- changing photos beside a long video ----------
+  let nextVideoSwapAt = 0;
+  function longVideoPlaying(now) {
+    const min = Number(cfg.video.changePhotosAfter) || 0;
+    if (min <= 0) return false;
+    return stage.slots.some((s) => {
+      const v = s.current && s.current.media.video;
+      return v && s.current.busyUntil > now && isFinite(v.duration) && v.duration > min;
+    });
+  }
+
+  // The playlist has nothing left for this event, so re-show the photo from the
+  // on-screen events that was shown longest ago; failing that, borrow from the next event.
+  function swapBesideVideo(now) {
+    const slots = stage.slots.filter((s) => !s.swapping && s.current && !(s.current.busyUntil > now));
+    if (!slots.length) return;
+    const slot = slots[Math.floor(Math.random() * slots.length)];
+    const onScreen = new Set(onScreenUrls());
+    const accept = (it) => it.type !== 'video' && !isSolo(it) && !(stage.slots.length === 1 && isPortrait(it));
+    let item = playlist.take(slot.aspect, { accept, exclude: onScreen });
+    if (!item) {
+      const events = new Set(stage.slots.filter((s) => s.current).map((s) => s.current.item.event));
+      const pool = [...events].filter(Boolean).flatMap((ev) => ev.items)
+        .filter((it) => accept(it) && !onScreen.has(it.url));
+      // Prefer photos not seen for a while, then ones that suit the spot's shape.
+      const score = (it) => SS.aspectCost(it.aspect, slot.aspect) - (now - (lastShown.get(it.url) || 0)) / 60000;
+      item = pool.sort((a, b) => score(a) - score(b))[0];
+    }
+    if (!item) item = playlist.take(slot.aspect, { accept, exclude: onScreen, spill: true });
+    if (!item) return;
+    log(`beside video: ${item.name}`);
+    slot.swapping = true;
+    const type = SS.pickTransition(cfg.transitions.slot.types);
+    swapSlot(slot, item, type, rand(cfg.transitions.slot.duration) * 1000)
+      .catch((e) => logError('swap failed', e.message));
+  }
+
   async function step() {
     clearTimeout(timer);
     if (paused || stepping) return;
@@ -540,7 +580,16 @@
           await changeLayout();
           return;
         }
-        if (forceLayout) { next = 1; return; } // event used up: wait for videos to finish
+        if (forceLayout) {
+          // Event used up: wait for videos to finish. Meanwhile, during a long video,
+          // change one of the other photos now and then.
+          if (!swapping && now >= nextVideoSwapAt && longVideoPlaying(now)) {
+            swapBesideVideo(now);
+            nextVideoSwapAt = now + rand(cfg.timing.interval) * 1000;
+          }
+          next = 1;
+          return;
+        }
       }
 
       const eligible = stage.slots.filter((s) => !s.swapping && !(s.current && s.current.busyUntil > now));

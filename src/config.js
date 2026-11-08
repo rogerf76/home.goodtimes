@@ -81,6 +81,7 @@ const DEFAULTS = {
     maxOnScreen: 1,
     playToEnd: true,
     maxSeconds: 60,
+    changePhotosAfter: 20,
   },
 
   captions: {
