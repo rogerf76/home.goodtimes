@@ -330,15 +330,15 @@
     const next = playlist.peek(1)[0];
     return !!next && isSolo(next);
   };
-  // Portrait photos are never shown full screen on their own, only alongside others.
-  const isPortrait = (it) => it.type !== 'video' && !!it.aspect && it.aspect < 1;
+  // Portrait photos and videos are never shown full screen on their own, only alongside others.
+  const isPortrait = (it) => !!it.aspect && it.aspect < 1;
   // Which items may go into a tile, given how many videos are already on screen and
   // whether the tile is the only one in its layout.
   const tileFilter = (videosOnScreen, alone) => (it) => !isSolo(it)
     && !(alone && isPortrait(it))
     && (it.type !== 'video' || videosOnScreen < cfg.video.maxOnScreen);
-  const fallbackFilter = (st) => tileFilter(Infinity, st.slots.length === 1);
-  const fitsAlone = tileFilter(Infinity, true);
+  const fallbackFilter = (st) => tileFilter(0, st.slots.length === 1);
+  const fitsAlone = tileFilter(0, true);
 
   function usableCount(items) {
     const tiles = items.filter((i) => !isSolo(i));
@@ -409,16 +409,13 @@
     const order = [...ns.slots].sort((a, b) => b.area - a.area);
     const jobs = [];
     const alone = ns.slots.length === 1;
-    let placed = 0;
-    let lonePortrait = false;
     for (const s of order) {
       const accept = solo ? isSolo : tileFilter(videos, alone);
-      let item = playlist.take(s.aspect, { accept, exclude });
-      // The event ran out with just one portrait photo: borrow a companion from the
-      // next event rather than leave the portrait on its own.
-      if (!item && placed === 1 && lonePortrait) item = playlist.take(s.aspect, { accept, exclude, spill: true });
+      // Every spot gets a photo: if this event has nothing suitable left, borrow from
+      // the following events rather than leave the spot empty.
+      const item = playlist.take(s.aspect, { accept, exclude })
+        || playlist.take(s.aspect, { accept, exclude, spill: true });
       if (!item) break;
-      if (placed++ === 0) lonePortrait = isPortrait(item);
       exclude.add(item.url);
       if (item.type === 'video') videos++;
       jobs.push(prepareFor(s, item, fallbackFilter(ns), exclude).then((m) => { s.prepared = m; }));
