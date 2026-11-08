@@ -248,7 +248,12 @@
     }
     slot.current = { media, item: media.item, shownAt: now, busyUntil };
     lastShown.set(media.item.url, now);
-    if (slot.stage === stage) refreshCaptions();
+    if (slot.stage === stage) {
+      refreshCaptions();
+      // Safety check: one layout never shows photos from different folders.
+      const folders = new Set(stage.slots.filter((s) => s.current && s.current.item.event).map((s) => s.current.item.event.unit));
+      if (folders.size > 1) logError(`photos from different folders on screen: ${stage.slots.filter((s) => s.current).map((s) => s.current.item.name).join(', ')}`);
+    }
   }
 
   const lastShown = new Map(); // url -> when it last went on screen
@@ -445,12 +450,14 @@
     const order = [...ns.slots].sort((a, b) => b.area - a.area);
     const jobs = [];
     const alone = ns.slots.length === 1;
+    const unit = playlist.buffer.length ? playlist.buffer[0].event.unit : null;
+    ns.unit = unit;
     for (const s of order) {
       const accept = solo ? isSolo : tileFilter(videos, alone);
-      // Every spot gets a photo: if this event has nothing suitable left, borrow from
-      // the following events rather than leave the spot empty.
+      // Every spot gets a photo: if this visit has nothing suitable left, borrow another
+      // photo from the same folder rather than leave the spot empty.
       const item = playlist.take(s.aspect, { accept, exclude })
-        || playlist.take(s.aspect, { accept, exclude, spill: true });
+        || borrowFromFolder(unit, s.aspect, accept, exclude);
       if (!item) break;
       exclude.add(item.url);
       if (item.type === 'video') videos++;
@@ -573,12 +580,28 @@
     replaceSlot(slots[Math.floor(Math.random() * slots.length)], now, 'beside video');
   }
 
+  // Photos from different folders (albums, the loose-photos folder, or separate events in
+  // the root folder) never share the screen. When a visit runs short, this finds another
+  // photo from the same folder: the one shown longest ago (or never), suiting the spot.
+  // Videos aren't borrowed, so they don't play again out of turn.
+  // Only items from the folder of the layout on screen.
+  const sameFolder = (accept) => (it) => accept(it) && (!stage || stage.unit == null || !it.event || it.event.unit === stage.unit);
+
+  function borrowFromFolder(unit, aspect, accept, exclude) {
+    if (unit == null) return null;
+    const now = Date.now();
+    const pool = playlist.events.filter((ev) => ev.unit === unit).flatMap((ev) => ev.items)
+      .filter((it) => it.type !== 'video' && accept(it) && !(exclude && exclude.has(it.url)));
+    const score = (it) => SS.aspectCost(it.aspect, aspect) - (now - (lastShown.get(it.url) || 0)) / 60000;
+    return pool.sort((a, b) => score(a) - score(b))[0] || null;
+  }
+
   // Replace one spot's photo/video outside the normal rhythm. Takes the next suitable item
-  // from the playlist; if this event has none left, re-shows the photo from the on-screen
-  // events that was shown longest ago; failing that, borrows from the next event.
+  // from the playlist; if this visit has none left, re-shows the photo from the on-screen
+  // events that was shown longest ago; failing that, borrows from the same folder.
   function replaceSlot(slot, now, why) {
     const otherVideos = stage.slots.filter((s) => s !== slot && s.current && s.current.item.type === 'video').length;
-    const accept = tileFilter(otherVideos, stage.slots.length === 1);
+    const accept = sameFolder(tileFilter(otherVideos, stage.slots.length === 1));
     const onScreen = new Set(onScreenUrls());
     let item = playlist.take(slot.aspect, { accept, exclude: onScreen });
     if (!item) {
@@ -589,7 +612,7 @@
       const score = (it) => SS.aspectCost(it.aspect, slot.aspect) - (now - (lastShown.get(it.url) || 0)) / 60000;
       item = pool.sort((a, b) => score(a) - score(b))[0];
     }
-    if (!item) item = playlist.take(slot.aspect, { accept, exclude: onScreen, spill: true });
+    if (!item) item = borrowFromFolder(slot.current && slot.current.item.event.unit, slot.aspect, accept, onScreen);
     if (!item) return;
     log(`${why}: ${item.name}`);
     slot.swapping = true;
@@ -647,7 +670,7 @@
       let delay = 0;
 
       for (const slot of chosen) {
-        const item = playlist.take(slot.aspect, { accept: tileFilter(videos, stage.slots.length === 1), exclude });
+        const item = playlist.take(slot.aspect, { accept: sameFolder(tileFilter(videos, stage.slots.length === 1)), exclude });
         if (!item) {
           // Event used up, or only portraits left for a full-screen photo: new layout.
           if (playlist.keepTogether || stage.slots.length === 1) { forceLayout = true; next = 0.5; }
