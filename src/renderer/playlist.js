@@ -215,15 +215,16 @@ class Playlist {
   /**
    * Take the best item for a slot of the given aspect ratio.
    * opts.accept (item => bool, which items may go here), opts.exclude (Set of urls already on screen).
+   * opts.spill: move on to the next event if this one is used up, even when keeping events together.
    * Returns null when the current event is used up (keepTogether) or nothing fits.
    */
   take(slotAspect, opts = {}) {
     if (this.isEmpty) return null;
+    const { accept = () => true, exclude = null, spill = false } = opts;
     if (!this.buffer.length) {
-      if (this.keepTogether) return null;
+      if (this.keepTogether && !spill) return null;
       this.advanceEvent();
     }
-    const { accept = () => true, exclude = null } = opts;
     const look = Math.max(1, this.cfg.layouts.lookahead);
     const ok = (it) => accept(it) && !(exclude && exclude.has(it.url));
 

@@ -344,10 +344,15 @@
     const next = playlist.peek(1)[0];
     return !!next && isSolo(next);
   };
-  // Which items may go into a tile, given how many videos are already on screen.
-  const tileFilter = (videosOnScreen) => (it) => !isSolo(it)
+  // Portrait photos are never shown full screen on their own, only alongside others.
+  const isPortrait = (it) => it.type !== 'video' && !!it.aspect && it.aspect < 1;
+  // Which items may go into a tile, given how many videos are already on screen and
+  // whether the tile is the only one in its layout.
+  const tileFilter = (videosOnScreen, alone) => (it) => !isSolo(it)
+    && !(alone && isPortrait(it))
     && (it.type !== 'video' || videosOnScreen < cfg.video.maxOnScreen);
-  const photoTile = tileFilter(Infinity);
+  const fallbackFilter = (st) => tileFilter(Infinity, st.slots.length === 1);
+  const fitsAlone = tileFilter(Infinity, true);
 
   function usableCount(items) {
     const tiles = items.filter((i) => !isSolo(i));
@@ -360,13 +365,20 @@
     const maxSlots = Math.max(...layouts.map((l) => l.slots.length));
     const upcoming = playlist.peek(Math.max(look, maxSlots));
     const available = usableCount(playlist.keepTogether ? playlist.peek(1000) : upcoming);
-    let candidates = layouts.filter((l) => l.slots.length <= Math.max(1, available));
-    if (!candidates.length) candidates = [layouts.reduce((a, b) => (a.slots.length <= b.slots.length ? a : b))];
+    // A one-photo layout needs something in the current event that may be shown alone
+    // (not a portrait), otherwise it would end up with a portrait photo full screen.
+    const aloneOk = playlist.buffer.some(fitsAlone);
+    let candidates = layouts.filter((l) => l.slots.length <= Math.max(1, available) && (l.slots.length > 1 || aloneOk));
+    if (!candidates.length) {
+      const multi = layouts.filter((l) => l.slots.length > 1);
+      const pool = aloneOk || !multi.length ? layouts : multi;
+      candidates = [pool.reduce((a, b) => (a.slots.length <= b.slots.length ? a : b))];
+    }
 
     const windowItems = upcoming.filter((i) => !isSolo(i)).slice(0, look);
     const scored = candidates.map((l) => {
       // Simulate filling the slots, biggest first, to see how well upcoming photos fit.
-      const pool = [...windowItems];
+      const pool = l.slots.length === 1 ? windowItems.filter(fitsAlone) : [...windowItems];
       const slots = screenAspectSlots(l).sort((a, b) => b.area - a.area);
       let cost = 0;
       for (const s of slots) {
@@ -406,14 +418,20 @@
     let videos = 0;
     const order = [...ns.slots].sort((a, b) => b.area - a.area);
     const jobs = [];
+    const alone = ns.slots.length === 1;
+    let placed = 0;
+    let lonePortrait = false;
     for (const s of order) {
-      const item = solo
-        ? playlist.take(s.aspect, { accept: isSolo, exclude })
-        : playlist.take(s.aspect, { accept: tileFilter(videos), exclude });
+      const accept = solo ? isSolo : tileFilter(videos, alone);
+      let item = playlist.take(s.aspect, { accept, exclude });
+      // The event ran out with just one portrait photo: borrow a companion from the
+      // next event rather than leave the portrait on its own.
+      if (!item && placed === 1 && lonePortrait) item = playlist.take(s.aspect, { accept, exclude, spill: true });
       if (!item) break;
+      if (placed++ === 0) lonePortrait = isPortrait(item);
       exclude.add(item.url);
       if (item.type === 'video') videos++;
-      jobs.push(prepareFor(s, item, photoTile, exclude).then((m) => { s.prepared = m; }));
+      jobs.push(prepareFor(s, item, fallbackFilter(ns), exclude).then((m) => { s.prepared = m; }));
     }
     await Promise.all(jobs);
     const filled = ns.slots.filter((s) => s.prepared);
@@ -469,7 +487,7 @@
     try {
       const owner = slot.stage;
       const exclude = new Set(onScreenUrls());
-      const media = await prepareFor(slot, item, photoTile, exclude);
+      const media = await prepareFor(slot, item, fallbackFilter(slot.stage), exclude);
       if (!media) return;
       if (stage !== owner) { releaseMedia(media); return; } // layout changed meanwhile
       // Neighbours glide to re-align around the new photo while it transitions in.
@@ -533,9 +551,10 @@
       let delay = 0;
 
       for (const slot of chosen) {
-        const item = playlist.take(slot.aspect, { accept: tileFilter(videos), exclude });
+        const item = playlist.take(slot.aspect, { accept: tileFilter(videos, stage.slots.length === 1), exclude });
         if (!item) {
-          if (playlist.keepTogether) { forceLayout = true; next = 0.5; }
+          // Event used up, or only portraits left for a full-screen photo: new layout.
+          if (playlist.keepTogether || stage.slots.length === 1) { forceLayout = true; next = 0.5; }
           break;
         }
         if (item.type === 'video') videos++;
