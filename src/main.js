@@ -23,7 +23,7 @@ function toClientLibrary(events) {
   return {
     generatedAt: Date.now(),
     events: events.map((ev) => ({
-      id: ev.id, unit: ev.unit, album: ev.album, start: ev.start, end: ev.end, place: ev.place, lat: ev.lat, lon: ev.lon,
+      id: ev.id, unit: ev.unit, album: ev.album, mixed: !!ev.mixed, start: ev.start, end: ev.end, place: ev.place, lat: ev.lat, lon: ev.lon,
       items: ev.items.map((it) => ({
         url: pathToFileURL(it.path).href,
         type: it.type,

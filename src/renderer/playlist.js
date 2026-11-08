@@ -96,23 +96,41 @@ class Playlist {
 
   shuffleUnits(units) {
     const visit = this.cfg.grouping.albumVisit; // null = whole album at once, else {min, max}
-    let chunks = units;
-    if (visit) {
-      chunks = [];
-      for (const u of units) {
-        if (!this.events[u[0]].album) { chunks.push(u); continue; }
-        for (let i = 0, part = 0; i < u.length; part++) {
-          const n = Math.max(1, Math.round(visit.min + Math.random() * (visit.max - visit.min)));
-          const c = u.slice(i, i + n);
+    const looseVisit = this.cfg.grouping.looseVisit; // photos per visit to the loose folder
+    const pick = (r) => Math.max(1, Math.round(r.min + Math.random() * (r.max - r.min)));
+    const chunks = [];
+    let split = false;
+    for (const u of units) {
+      const first = this.events[u[0]];
+      if (first.mixed && looseVisit) {
+        // Loose folder: no order to keep, so shuffle its events and cut it into runs
+        // of roughly looseVisit photos each.
+        const evs = SS.shuffle([...u]);
+        for (let i = 0, part = 0; i < evs.length; part++) {
+          const want = pick(looseVisit);
+          const c = [];
+          let n = 0;
+          while (i < evs.length && n < want) { c.push(evs[i]); n += this.events[evs[i]].items.length; i++; }
           c.key = u.key;
           c.part = part;
           chunks.push(c);
-          i += n;
         }
+        split = true;
+      } else if (first.album && visit) {
+        for (let i = 0, part = 0; i < u.length; part++) {
+          const c = u.slice(i, i + pick(visit));
+          c.key = u.key;
+          c.part = part;
+          chunks.push(c);
+          i += c.length;
+        }
+        split = true;
+      } else {
+        chunks.push(u);
       }
     }
     SS.shuffle(chunks);
-    if (visit) {
+    if (split) {
       // Avoid two chunks of the same album back to back (they'd just merge into one long run).
       for (let i = 1; i < chunks.length; i++) {
         if (chunks[i].key !== chunks[i - 1].key) continue;
@@ -135,7 +153,7 @@ class Playlist {
         const ordered = positions.map((p) => chunks[p]).sort((a, b) => (a.part || 0) - (b.part || 0));
         positions.forEach((p, k) => { fixed[p] = ordered[k]; });
       }
-      chunks = fixed;
+      return fixed;
     }
     return chunks;
   }
@@ -173,6 +191,15 @@ class Playlist {
   // Days only join while they're near each other: a trip that moves on (e.g. from
   // Alberta to California) starts a fresh screen rather than mixing the two.
   joinAlbumDays(ev) {
+    if (ev.mixed) {
+      // Loose folder: everything up to the end of this visit, in any order.
+      while (this.pos + 1 < this.order.length && this.events[this.order[this.pos + 1]].unit === ev.unit) {
+        this.pos++;
+        this.buffer.push(...this.events[this.order[this.pos]].items);
+      }
+      SS.shuffle(this.buffer);
+      return;
+    }
     if (!ev.album || !this.cfg.grouping.mixAlbumDays) return;
     const maxKm = this.cfg.grouping.mixAlbumMaxKm;
     let lastLoc = ev.lat != null ? ev : null;

@@ -7,6 +7,11 @@
 // loose photos or other albums, and played back together as one block ("unit").
 // Loose photos in the root folder are split into events as usual; each of those
 // events is its own unit.
+//
+// The loosePhotos folder (settings.local.yaml) holds unrelated photos with no rules at
+// all: it is one unit whose events are marked `mixed`, and playback shuffles them
+// together freely, whatever their dates and places. Its events are still split by
+// time and place so each photo keeps its own place name in captions.
 
 function haversineKm(a, b) {
   const R = 6371;
@@ -47,11 +52,23 @@ function splitByTimeAndPlace(items, cfg) {
   return events;
 }
 
+function isInLooseFolder(it, cfg) {
+  const lp = cfg.loosePhotos;
+  if (!lp) return false;
+  if (lp.name) return !!it.album && it.album.toLowerCase() === lp.name.toLowerCase();
+  const dir = lp.path.replace(/[\\/]+$/, '').toLowerCase();
+  const p = it.path.toLowerCase();
+  return p.startsWith(`${dir}\\`) || p.startsWith(`${dir}/`);
+}
+
 function groupIntoEvents(items, cfg) {
   const albums = new Map(); // albumKey -> items
   const loose = [];
+  const mixed = [];
   for (const it of items) {
-    if (it.albumKey) {
+    if (isInLooseFolder(it, cfg)) {
+      mixed.push(it);
+    } else if (it.albumKey) {
       if (!albums.has(it.albumKey)) albums.set(it.albumKey, []);
       albums.get(it.albumKey).push(it);
     } else {
@@ -64,6 +81,11 @@ function groupIntoEvents(items, cfg) {
   for (const albumItems of albums.values()) {
     const events = splitByTimeAndPlace(albumItems, cfg);
     if (events.length) units.push({ start: events[0].start, album: albumItems[0].album, events });
+  }
+  if (mixed.length) {
+    const events = splitByTimeAndPlace(mixed, cfg);
+    events.forEach((ev) => { ev.mixed = true; });
+    units.push({ start: events[0].start, album: null, events });
   }
   units.sort((a, b) => a.start - b.start);
 

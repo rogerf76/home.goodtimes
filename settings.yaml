@@ -43,6 +43,9 @@ grouping:
   # moving on to something else. The album carries on, in order, on a later visit.
   # Use 'all' to play each album start to finish in one go.
   albumVisit: [2, 4]
+  # shuffle-events only: roughly how many photos from the loose-photos folder (see
+  # loosePhotos in settings.local.yaml) to show per visit. 'all' = the whole folder at once.
+  looseVisit: [10, 20]
 
 # ── Timing ──────────────────────────────────────────────────────────────────
 timing:

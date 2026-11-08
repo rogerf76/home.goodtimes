@@ -9,6 +9,7 @@ const yaml = require('js-yaml');
 const DEFAULTS = {
   sources: [],
   recursive: true,
+  loosePhotos: null,
   include: {
     images: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'],
     videos: ['mp4', 'm4v', 'mov', 'webm'],
@@ -24,6 +25,7 @@ const DEFAULTS = {
     maxDistanceKm: 30,
     keepEventsTogether: true,
     albumVisit: [2, 4],
+    looseVisit: [10, 20],
     mixAlbumDays: true,
     mixAlbumMaxKm: 150,
   },
@@ -150,6 +152,10 @@ sources:
 # Also include folders nested deeper inside an album (subfolder).
 recursive: true
 
+# A folder of unrelated photos that can be mixed freely, whatever their dates or
+# places: a folder name inside a source folder, or a full path. Leave out for none.
+loosePhotos: 'Loose-Photos'
+
 display:
   screen: 0                   # which monitor (0 = first)
   fullscreen: true
@@ -187,9 +193,16 @@ ${e.message}`); }
   cfg.sources = cfg.sources.map((s) => path.resolve(baseDir, String(s)));
   cfg.cacheFile = cfg.cacheFile ? path.resolve(baseDir, cfg.cacheFile) : null;
   cfg.geocoding.cacheFile = path.resolve(baseDir, cfg.geocoding.cacheFile);
+  if (cfg.loosePhotos != null && cfg.loosePhotos !== '') {
+    const lp = String(cfg.loosePhotos);
+    // A bare folder name matches that folder in any source; anything with a slash is a path.
+    cfg.loosePhotos = /[\\/]/.test(lp) ? { path: path.resolve(baseDir, lp) } : { name: lp };
+  } else cfg.loosePhotos = null;
 
   const av = cfg.grouping.albumVisit;
   cfg.grouping.albumVisit = av == null || av === 0 || av === 'all' ? null : toRange(av, 'grouping.albumVisit');
+  const lv = cfg.grouping.looseVisit;
+  cfg.grouping.looseVisit = lv == null || lv === 0 || lv === 'all' ? null : toRange(lv, 'grouping.looseVisit');
   cfg.timing.interval = toRange(cfg.timing.interval, 'timing.interval');
   cfg.timing.layoutDuration = toRange(cfg.timing.layoutDuration, 'timing.layoutDuration');
   cfg.timing.stagger = toRange(cfg.timing.stagger, 'timing.stagger');
