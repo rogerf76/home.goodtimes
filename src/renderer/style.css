@@ -39,7 +39,7 @@ html, body {
   inset: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -51,8 +51,6 @@ html, body {
   height: min(100cqh, calc(100cqw / var(--ar)));
 }
 .media .main.rounded { border-radius: var(--radius); }
-.media .main { overflow: hidden; }
-.media .main .pic { display: block; width: 100%; height: 100%; }
 
 .media .backdrop {
   position: absolute;

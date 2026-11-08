@@ -67,12 +67,9 @@ const DEFAULTS = {
     background: '#000000',
     gap: 6,
     cornerRadius: 0,
-    fitSingle: 'contain',
-    maxCrop: 0,
     alignPhotos: 0.1,
     wideFullScreen: 1.96,
     blurredBackdrop: false,
-    kenBurns: { enabled: true, chance: 0.3, maxPhotoSize: 0.4, maxZoom: 1.15 },
     preventSleep: true,
   },
 

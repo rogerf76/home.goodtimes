@@ -23,13 +23,15 @@ SS.TRANSITIONS = {
   'slide-right': slide(-1, 0),
   'slide-up': slide(0, 1),
   'slide-down': slide(0, -1),
+  // Zooms never scale a photo past its own size, so no part of it is ever cut off
+  // by the edge of its spot.
   'zoom-in': {
-    in: [{ opacity: 0, transform: 'scale(1.25)' }, { opacity: 1, transform: 'scale(1)' }],
-    out: [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.9)' }],
+    in: [{ opacity: 0, transform: 'scale(0.6)' }, { opacity: 1, transform: 'scale(1)' }],
+    out: [{ opacity: 1 }, { opacity: 0 }],
   },
   'zoom-out': {
-    in: [{ opacity: 0, transform: 'scale(0.8)' }, { opacity: 1, transform: 'scale(1)' }],
-    out: [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.15)' }],
+    in: [{ opacity: 0 }, { opacity: 1 }],
+    out: [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(0.6)' }],
   },
   blur: {
     in: [{ opacity: 0, filter: 'blur(30px)' }, { opacity: 1, filter: 'blur(0px)' }],
