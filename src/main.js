@@ -115,6 +115,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('get-library', () => library);
   ipcMain.on('quit', () => app.quit());
   ipcMain.on('log', (_e, ...m) => log('renderer:', ...m));
+  ipcMain.on('error', (_e, ...m) => console.error('[goodtimes] ERROR', ...m));
 
   if (cfg.display.preventSleep) powerSaveBlocker.start('prevent-display-sleep');
 

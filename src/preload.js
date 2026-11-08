@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('goodtimes', {
   onStatus: (cb) => ipcRenderer.on('status', (_e, s) => cb(s)),
   quit: () => ipcRenderer.send('quit'),
   log: (...m) => ipcRenderer.send('log', ...m),
+  error: (...m) => ipcRenderer.send('error', ...m),
 });

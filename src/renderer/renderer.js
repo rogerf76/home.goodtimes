@@ -29,6 +29,16 @@
   const easing = cfg.transitions.easing;
   const dateFmt = new Intl.DateTimeFormat(cfg.captions.locale || undefined, cfg.captions.dateFormat);
   const log = (...m) => { console.log(...m); goodtimes.log(...m.map(String)); };
+  const logError = (...m) => { console.error(...m); goodtimes.error(...m.map(String)); };
+
+  // file:///D:/x/y.jpg -> D:\x\y.jpg, file://nas/share/y.jpg -> \\nas\share\y.jpg
+  function filePath(url) {
+    try {
+      const u = new URL(url);
+      const p = decodeURIComponent(u.pathname);
+      return (u.host ? `//${u.host}${p}` : p.replace(/^\/([A-Za-z]:)/, '$1')).replace(/\//g, '\\');
+    } catch { return url; }
+  }
 
   const layouts = SS.buildLayouts(cfg);
   const playlist = new SS.Playlist(cfg);
@@ -48,7 +58,8 @@
     const img = new Image();
     img.decoding = 'async';
     img.src = url;
-    return withTimeout(img.decode().then(() => img), 30000, url);
+    return withTimeout(img.decode().then(() => img), 30000, url)
+      .catch((e) => { throw new Error(/timeout/.test(e.message) ? 'timed out after 30s' : `can't read or decode the image (${e.message})`); });
   }
   function loadImage(url) {
     const p = imgCache.get(url);
@@ -149,8 +160,8 @@
       try {
         await withTimeout(new Promise((res, rej) => {
           video.addEventListener('loadeddata', res, { once: true });
-          video.addEventListener('error', () => rej(new Error(`cannot play ${item.name}`)), { once: true });
-        }), 30000, item.name);
+          video.addEventListener('error', () => rej(new Error(videoError(video))), { once: true });
+        }), 30000, item.name).catch((e) => { throw /timeout/.test(e.message) ? new Error('timed out after 30s') : e; });
       } catch (e) {
         releaseVideo(video);
         throw e;
@@ -167,10 +178,6 @@
     main.className = 'main fitted';
     main.style.objectFit = 'contain';
     main.style.setProperty('--ar', aspect.toFixed(5));
-    // Round the corners of every photo except one that fills the whole screen.
-    const isSingle = stageOf(slot).slots.length === 1;
-    const fillsScreen = isSingle && Math.abs(Math.log(aspect / slot.aspect)) < 0.01;
-    if (!fillsScreen) main.classList.add('rounded');
 
     if (cfg.display.blurredBackdrop && item.type === 'image') {
       const bd = new Image();
@@ -179,7 +186,27 @@
       wrap.appendChild(bd);
     }
     wrap.appendChild(main);
-    return { node: wrap, main, video, item };
+    const media = { node: wrap, main, video, item };
+    frameFor(media, slot);
+    return media;
+  }
+
+  // Round the corners of every photo except one that fills the whole screen.
+  function frameFor(media, slot) {
+    const aspect = media.item.aspect || 1.5;
+    const fillsScreen = stageOf(slot).slots.length === 1 && Math.abs(Math.log(aspect / slot.aspect)) < 0.01;
+    media.main.classList.toggle('rounded', !fillsScreen);
+  }
+
+  function videoError(v) {
+    const err = v.error;
+    const why = {
+      1: 'loading was aborted',
+      2: 'network error while reading the file',
+      3: "decoding failed (file damaged, or a codec Chromium can't play)",
+      4: 'format or codec not supported (needs H.264, VP9 or AV1, e.g. not HEVC/H.265)',
+    }[err && err.code] || 'cannot play';
+    return err && err.message ? `${why}: ${err.message}` : why;
   }
 
   function releaseVideo(v) {
@@ -215,7 +242,7 @@
       try {
         return await createMedia(item, slot);
       } catch (e) {
-        log(`skipping ${item.name}: ${e.message}`);
+        logError(`failed to load ${item.type === 'video' ? 'video' : 'photo'} ${filePath(item.url)}: ${e.message} (skipping it)`);
         playlist.markBroken(item);
         item = playlist.take(slot.aspect, { accept, exclude });
       }
@@ -334,9 +361,13 @@
       candidates = [pool.reduce((a, b) => (a.slots.length <= b.slots.length ? a : b))];
     }
 
-    const windowItems = upcoming.filter((i) => !isSolo(i)).slice(0, look);
+    return pickLayout(candidates, upcoming.filter((i) => !isSolo(i)).slice(0, look));
+  }
+
+  // Weighted random pick, favouring layouts whose slot shapes suit these items.
+  function pickLayout(candidates, windowItems) {
     const scored = candidates.map((l) => {
-      // Simulate filling the slots, biggest first, to see how well upcoming photos fit.
+      // Simulate filling the slots, biggest first, to see how well the photos fit.
       const pool = l.slots.length === 1 ? windowItems.filter(fitsAlone) : [...windowItems];
       const slots = screenAspectSlots(l).sort((a, b) => b.area - a.area);
       let cost = 0;
@@ -369,8 +400,8 @@
     if (playlist.isEmpty) return;
 
     const solo = soloIsNext();
-    const layout = solo ? SOLO_LAYOUT : chooseLayout();
-    const ns = createStage(layout);
+    let layout = solo ? SOLO_LAYOUT : chooseLayout();
+    let ns = createStage(layout);
 
     // Assign items, biggest slots first.
     const exclude = new Set();
@@ -393,10 +424,32 @@
       jobs.push(prepareFor(s, item, fallbackFilter(ns), exclude).then((m) => { s.prepared = m; }));
     }
     await Promise.all(jobs);
-    const filled = ns.slots.filter((s) => s.prepared);
+    let filled = ns.slots.filter((s) => s.prepared);
     if (!filled.length) {
       if (playlist.isEmpty) showStatus('No playable photos or videos found.');
       return;
+    }
+    if (filled.length < ns.slots.length) {
+      // Some photos couldn't be loaded (or the event ran out): rather than leave empty
+      // spots, switch to a layout with exactly as many spots as there are photos.
+      const ready = filled.map((s) => s.prepared);
+      const fits = layouts.filter((l) => l.slots.length === ready.length
+        && (ready.length > 1 || fitsAlone(ready[0].item)));
+      if (fits.length) {
+        const from = layout.name;
+        layout = pickLayout(fits, ready.map((m) => m.item));
+        ns = createStage(layout);
+        const pool = [...ready];
+        for (const s of [...ns.slots].sort((a, b) => b.area - a.area)) {
+          let bi = 0;
+          let bc = Infinity;
+          pool.forEach((m, i) => { const c = SS.aspectCost(m.item.aspect, s.aspect); if (c < bc) { bc = c; bi = i; } });
+          s.prepared = pool.splice(bi, 1)[0];
+          frameFor(s.prepared, s);
+        }
+        filled = ns.slots;
+        log(`layout ${from} only got ${ready.length} item(s), using ${layout.name} instead`);
+      }
     }
 
     alignStage(ns, null, 0);
@@ -521,11 +574,11 @@
         const type = mode === 'all' ? shared : SS.pickTransition(cfg.transitions.slot.types);
         const dur = rand(cfg.transitions.slot.duration) * 1000;
         slot.swapping = true;
-        setTimeout(() => swapSlot(slot, item, type, dur).catch((e) => log('swap failed', e.message)), delay);
+        setTimeout(() => swapSlot(slot, item, type, dur).catch((e) => logError('swap failed', e.message)), delay);
         delay += rand(cfg.timing.stagger) * 1000;
       }
     } catch (e) {
-      log('step error', e && e.stack ? e.stack : e);
+      logError('step error', e && e.stack ? e.stack : e);
     } finally {
       stepping = false;
       prefetch();
